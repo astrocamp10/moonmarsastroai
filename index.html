@@ -1,0 +1,204 @@
+<!doctype html>
+<html lang="ko">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>AI 우주탐사, 달과 화성</title>
+    <link rel="stylesheet" href="styles.css?v=20260604-mobilehome">
+  </head>
+  <body>
+    <div class="starfield" aria-hidden="true"></div>
+
+    <div id="keyGate" class="key-gate hidden" role="alert">
+      <div class="key-panel">
+        <div class="key-emoji">🚀</div>
+        <h1>선생님께 받은 특별 링크로 접속해 주세요!</h1>
+        <p>주소 끝에 <strong>?key=YOUR_API_KEY</strong>가 있는 링크가 필요해요.</p>
+      </div>
+    </div>
+
+    <main id="app" class="app">
+      <section id="selectionScreen" class="screen selection-screen">
+        <div class="flight-layer" aria-hidden="true">
+          <span class="ship ship-one">🚀</span>
+          <span class="ship ship-two">🛸</span>
+          <span class="ship ship-three">🛰️</span>
+        </div>
+
+        <header class="home-header">
+          <p class="eyebrow">AI 우주탐사 교실</p>
+          <h1><span>AI 우주탐사,</span><span>달과 화성</span></h1>
+          <p class="home-copy">궁금한 곳에 동그라미를 그리고 달·화성 전문가 AI에게 물어보세요.</p>
+        </header>
+
+        <div class="planet-picker" aria-label="탐사할 천체 선택">
+          <button class="planet-card moon-card" type="button" data-body="moon">
+            <span class="planet-emoji">🌕</span>
+            <span class="planet-name">달 탐사</span>
+            <span class="planet-note">크레이터와 고도를 살펴봐요</span>
+          </button>
+          <button class="planet-card mars-card" type="button" data-body="mars">
+            <span class="planet-emoji">🔴</span>
+            <span class="planet-name">화성 탐사</span>
+            <span class="planet-note">협곡, 화산, 로버 사진까지</span>
+          </button>
+        </div>
+
+        <div class="home-actions">
+          <button id="homeSettingsBtn" class="soft-button" type="button">⚙️ AI 모델 설정</button>
+          <button id="homeHistoryBtn" class="soft-button" type="button">🗂️ 탐사 기록</button>
+          <button id="homePlanBtn" class="soft-button" type="button">📝 탐사 계획표</button>
+        </div>
+
+        <div class="home-logo" aria-label="어린이천문대 인천">
+          <img src="logo.png" alt="어린이천문대 인천">
+        </div>
+      </section>
+
+      <section id="exploreScreen" class="screen explore-screen hidden">
+        <div id="viewer" class="viewer">
+          <canvas id="sphereCanvas" class="sphere-canvas" aria-label="구형 행성 보기"></canvas>
+
+          <div id="flatLayer" class="flat-layer hidden" aria-label="평면 지도 보기">
+            <img id="mapImage" class="map-image" alt="">
+            <img id="elevationImage" class="map-image elevation-image hidden" alt="">
+          </div>
+
+          <div id="roverLayer" class="rover-layer hidden" aria-label="퍼서비어런스 로버 사진 보기">
+            <img id="roverImage" class="rover-image" alt="퍼서비어런스 로버가 촬영한 화성 사진">
+          </div>
+
+          <canvas id="drawCanvas" class="draw-canvas" aria-label="분석할 곳에 동그라미 그리기"></canvas>
+
+          <div class="hud top-hud">
+            <button id="backBtn" class="icon-button" type="button" title="처음 화면">←</button>
+            <div id="bodyBadge" class="body-badge">🌕 달</div>
+
+            <div class="tool-group" aria-label="보기 도구">
+              <button id="sphereBtn" class="icon-button active" type="button" title="구형 보기">🌐</button>
+              <button id="flatBtn" class="icon-button" type="button" title="지도 보기">🗺️</button>
+              <button id="roverBtn" class="icon-button hidden" type="button" title="로버 사진">🚙</button>
+            </div>
+
+            <div id="zoomControls" class="tool-group zoom-tools" aria-label="확대 도구">
+              <button id="zoomOutBtn" class="icon-button" type="button" title="축소">−</button>
+              <span id="zoomLevel" class="zoom-level">1×</span>
+              <button id="zoomInBtn" class="icon-button" type="button" title="확대">+</button>
+              <button id="zoomResetBtn" class="icon-button" type="button" title="확대 초기화">⤢</button>
+            </div>
+
+            <div class="tool-group" aria-label="그리기 도구">
+              <button id="drawToggleBtn" class="icon-button" type="button" title="동그라미 그리기">✏️</button>
+              <button id="clearBtn" class="icon-button" type="button" title="그림 지우기">↺</button>
+            </div>
+
+            <label id="elevationControl" class="range-tool hidden" title="달 고도 지도 겹치기">
+              <span>⛰️</span>
+              <input id="elevationRange" type="range" min="0" max="80" value="42">
+            </label>
+
+            <button id="analyzeBtn" class="primary-button" type="button">🔬 전문가 분석 요청</button>
+
+            <div class="tool-group" aria-label="저장 도구">
+              <button id="settingsBtn" class="icon-button" type="button" title="AI 모델 설정">⚙️</button>
+              <button id="historyBtn" class="icon-button" type="button" title="탐사 기록">🗂️</button>
+              <button id="planBtn" class="icon-button" type="button" title="탐사 계획표">📝</button>
+            </div>
+          </div>
+
+          <div id="coordChip" class="coord-chip">좌우로 돌려 보세요</div>
+
+          <div id="roverTray" class="rover-tray hidden" aria-label="로버 사진 목록"></div>
+        </div>
+      </section>
+    </main>
+
+    <div id="loadingOverlay" class="loading-overlay hidden" role="status" aria-live="polite">
+      <div class="loader-ring"></div>
+      <p>AI 전문가가 지도를 읽고 있어요...</p>
+    </div>
+
+    <div id="answerModal" class="modal hidden" role="dialog" aria-modal="true" aria-labelledby="answerTitle">
+      <div class="modal-panel answer-panel">
+        <div class="modal-head">
+          <div>
+            <p class="modal-eyebrow">달·화성 전문가 AI</p>
+            <h2 id="answerTitle">전문가 분석</h2>
+          </div>
+          <button class="icon-button close-modal" type="button" data-close="answerModal" title="닫기">×</button>
+        </div>
+        <div id="answerBody" class="answer-body"></div>
+        <form id="followupForm" class="followup-form">
+          <input id="followupInput" type="text" placeholder="추가 질문을 입력해 보세요" autocomplete="off">
+          <button class="primary-button" type="submit">질문</button>
+        </form>
+      </div>
+    </div>
+
+    <div id="historyModal" class="modal hidden" role="dialog" aria-modal="true" aria-labelledby="historyTitle">
+      <div class="modal-panel">
+        <div class="modal-head">
+          <div>
+            <p class="modal-eyebrow">저장된 대화</p>
+            <h2 id="historyTitle">탐사 기록</h2>
+          </div>
+          <button class="icon-button close-modal" type="button" data-close="historyModal" title="닫기">×</button>
+        </div>
+        <div id="historyList" class="history-list"></div>
+        <button id="clearHistoryBtn" class="soft-button danger" type="button">기록 비우기</button>
+      </div>
+    </div>
+
+    <div id="planModal" class="modal hidden" role="dialog" aria-modal="true" aria-labelledby="planTitle">
+      <div class="modal-panel plan-panel">
+        <div class="modal-head">
+          <div>
+            <p class="modal-eyebrow">우리 반 미션</p>
+            <h2 id="planTitle">달 및 화성탐사 계획표</h2>
+          </div>
+          <button class="icon-button close-modal" type="button" data-close="planModal" title="닫기">×</button>
+        </div>
+        <div class="plan-grid">
+          <label>
+            <span>탐사 목표</span>
+            <textarea id="planGoal" rows="4" placeholder="예: 달의 밝은 선 조사"></textarea>
+          </label>
+          <label>
+            <span>탐사 순서</span>
+            <textarea id="planSteps" rows="7" placeholder="1. 달 지도에서 큰 크레이터 찾기&#10;2. 고도 지도를 겹쳐 보기"></textarea>
+          </label>
+          <label>
+            <span>발견한 점</span>
+            <textarea id="planFindings" rows="7" placeholder="오늘 발견한 지형과 질문을 적어 보세요"></textarea>
+          </label>
+        </div>
+        <div class="plan-footer">
+          <span id="planSavedText">자동 저장 준비됨</span>
+          <button id="clearPlanBtn" class="soft-button danger" type="button">계획표 비우기</button>
+        </div>
+      </div>
+    </div>
+
+    <div id="settingsModal" class="modal hidden" role="dialog" aria-modal="true" aria-labelledby="settingsTitle">
+      <div class="modal-panel settings-panel">
+        <div class="modal-head">
+          <div>
+            <p class="modal-eyebrow">선생님 설정</p>
+            <h2 id="settingsTitle">AI 모델 설정</h2>
+          </div>
+          <button class="icon-button close-modal" type="button" data-close="settingsModal" title="닫기">×</button>
+        </div>
+        <div id="modelOptions" class="model-options" aria-label="사용할 AI 모델 선택"></div>
+        <label class="custom-model-field">
+          <span>직접 모델 ID 입력</span>
+          <input id="customModelInput" type="text" placeholder="예: gemini-3.1-flash-lite" autocomplete="off">
+        </label>
+        <p id="modelSavedText" class="model-saved-text">선택한 모델이 자동 저장됩니다.</p>
+      </div>
+    </div>
+
+    <div id="toast" class="toast hidden" role="status" aria-live="polite"></div>
+
+    <script src="script.js?v=20260604-mobilehome"></script>
+  </body>
+</html>
