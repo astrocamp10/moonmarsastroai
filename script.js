@@ -72,7 +72,7 @@ const FINAL_RESPONSE_RULES = [
   "중요한 최종 출력 규칙:",
   "아래의 후보 좌표와 참고 기준은 답변을 만들기 위한 내부 자료입니다. 그대로 복사하거나 요약해서 보여주지 마세요.",
   "답변에는 최종 설명만 한국어로 작성하세요.",
-  "영어 계획, Tone Check, Constraint Check, Target Point, Candidate, Visual Inspection, Conclusion 같은 내부 메모를 쓰지 마세요.",
+  "답변 앞뒤에 영어 계획표, 문단 설계, 자체 점검표, 내부 판단 메모를 절대 붙이지 마세요.",
   "답변은 5~7개의 짧은 문단으로 작성하고, 각 문단은 2~4문장 정도로 유지하세요.",
   "답변 구조는 1) 지형 추정, 2) 관찰 근거 2~3가지, 3) 지형이 만들어진 과정, 4) 왜 과학적으로 중요한지, 5) 쉬운 비유, 6) 다음 관찰 질문 하나를 포함하세요.",
 ].join("\n");
@@ -1445,6 +1445,7 @@ function cleanAiAnswer(answer) {
   let cleaned = answer.trim();
   const leakedPlanningPatterns = [
     /30-year veteran/i,
+    /30-year expert/i,
     /10-year-old elementary/i,
     /Tone Check/i,
     /Constraint Check/i,
@@ -1453,6 +1454,15 @@ function cleanAiAnswer(answer) {
     /Candidates:/i,
     /Visual Inspection/i,
     /Conclusion:/i,
+    /Formation Process/i,
+    /Scientific Importance/i,
+    /Follow-up Question/i,
+    /\bIntro:/i,
+    /\bPara\s*\d/i,
+    /Technical terms explained/i,
+    /Structure followed/i,
+    /Friendly\/easy\/scientific/i,
+    /No internal notes/i,
     /Image:\s*A global/i,
     /Coordinates of the red circle/i,
     /Section\s+\d/i,
@@ -1460,12 +1470,17 @@ function cleanAiAnswer(answer) {
   ];
 
   if (leakedPlanningPatterns.some((pattern) => pattern.test(cleaned))) {
-    const finalAnswerStart = cleaned.search(
-      /(?:^|\n)\s*(안녕|좋아요|좋아|멋진|탐험가|친구가|표시한 곳|이곳은|\*\*1\.|1\.\s)/m,
-    );
+    const finalAnswerStart = findFinalKoreanAnswerStart(cleaned);
     if (finalAnswerStart > 0) {
       cleaned = cleaned.slice(finalAnswerStart).trim();
     }
+  }
+
+  const trailingNotesStart = cleaned.search(
+    /\n\s*\*\s*(?:30-year|10-year|Friendly|Estimated|No NASA|No internal|Short paragraphs|Technical terms|Structure followed)/i,
+  );
+  if (trailingNotesStart > 0) {
+    cleaned = cleaned.slice(0, trailingNotesStart).trim();
   }
 
   return cleaned
@@ -1473,6 +1488,25 @@ function cleanAiAnswer(answer) {
     .replace(/NASA 지질학자 AI/g, "달·화성 전문가 AI")
     .replace(/NASA 행성 지질학자/g, "달·화성 전문가 AI")
     .trim();
+}
+
+function findFinalKoreanAnswerStart(text) {
+  const explicitStart = text.search(
+    /(?:^|\n)\s*(안녕|안녕하세요|좋아요|좋아|멋진|탐험가|친구가|네가|표시한 곳|이곳은|우리 친구|이번에|와[!！]?|\*\*1\.|1\.\s*[가-힣])/m,
+  );
+  if (explicitStart > 0) return explicitStart;
+
+  let offset = 0;
+  const lines = text.split("\n");
+  for (const line of lines) {
+    const compactLine = line.trim();
+    if (/^(?:[#*\-\d.()\s]*)[가-힣]/.test(compactLine)) {
+      return offset + line.indexOf(compactLine);
+    }
+    offset += line.length + 1;
+  }
+
+  return -1;
 }
 
 function formatGeminiError(errors) {
@@ -1524,12 +1558,13 @@ async function submitFollowup(event) {
 }
 
 function showAnswer(selection, answer, imageBase64) {
+  const cleanedAnswer = cleanAiAnswer(answer);
   els.answerBody.innerHTML = "";
   if (imageBase64) {
     appendAnswerPreview(imageBase64, selection.title);
   }
   appendAnswerCard(selection.title, selection.description);
-  appendAnswerCard("전문가 답변", answer);
+  appendAnswerCard("전문가 답변", cleanedAnswer);
   openModal("answerModal");
 }
 
@@ -1557,7 +1592,7 @@ function appendAnswerCard(title, text) {
   const strong = document.createElement("strong");
   strong.textContent = title;
   const body = document.createElement("div");
-  body.textContent = text;
+  body.textContent = /답변/.test(title) ? cleanAiAnswer(text) : text;
   card.append(strong, body);
   els.answerBody.append(card);
 }
@@ -1594,7 +1629,8 @@ function renderHistory() {
       <p class="history-preview"></p>
     `;
     article.querySelector(".history-question").textContent = item.question;
-    article.querySelector(".history-preview").textContent = item.answer.slice(0, 170) + (item.answer.length > 170 ? "..." : "");
+    const cleanedAnswer = cleanAiAnswer(item.answer || "");
+    article.querySelector(".history-preview").textContent = cleanedAnswer.slice(0, 170) + (cleanedAnswer.length > 170 ? "..." : "");
 
     const button = document.createElement("button");
     button.type = "button";
@@ -1603,7 +1639,7 @@ function renderHistory() {
     button.addEventListener("click", () => {
       els.answerBody.innerHTML = "";
       appendAnswerCard(item.question, item.details || "");
-      appendAnswerCard("저장된 답변", item.answer);
+      appendAnswerCard("저장된 답변", cleanedAnswer);
       closeModal("historyModal");
       openModal("answerModal");
     });
@@ -1614,7 +1650,11 @@ function renderHistory() {
 }
 
 function saveHistory(item) {
-  state.history = [item, ...state.history].slice(0, 30);
+  const cleanedItem = {
+    ...item,
+    answer: cleanAiAnswer(item.answer || ""),
+  };
+  state.history = [cleanedItem, ...state.history].slice(0, 30);
   saveJson(HISTORY_KEY, state.history);
 }
 
