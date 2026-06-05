@@ -7,7 +7,7 @@ const HISTORY_KEY = "moonMarsAstroAI.history.v1";
 const PLAN_KEY = "moonMarsAstroAI.plan.v1";
 const MODEL_KEY = "moonMarsAstroAI.model.v1";
 const ANSWER_LEVEL_KEY = "moonMarsAstroAI.answerLevel.v1";
-const DEFAULT_MODEL_ID = "gemma-4-31b-it";
+const DEFAULT_MODEL_ID = "gemini-3.1-flash-lite";
 const DEFAULT_ANSWER_LEVEL_KEY = "easy";
 
 const MODEL_ID_ALIASES = {
@@ -21,22 +21,22 @@ const MODEL_PRESETS = [
     id: "gemma-4-31b-it",
     label: "Gemma 4 31B",
     badge: "깊게 분석",
-    limitText: "Gemma 4 모델은 추론 시간이 있어 답변이 조금 늦지만, 한 달에 약 1,500번 사용할 수 있어요.",
-    description: "복잡한 달·화성 지형을 더 차분하게 비교할 때 좋아요.",
+    limitText: "Gemma 계열은 월 단위가 아니라 프로젝트별 일일 요청(RPD) 제한이 적용돼요.",
+    description: "복잡한 달·화성 지형을 더 차분하게 비교할 때 좋아요. 실제 하루 한도는 AI Studio의 Rate limits에서 확인해 주세요.",
   },
   {
     id: "gemma-4-26b-it",
     label: "Gemma 4 26B",
     badge: "균형형",
-    limitText: "Gemma 4 모델은 추론 시간이 있어 답변이 조금 늦지만, 한 달에 약 1,500번 사용할 수 있어요.",
-    description: "31B보다 가볍게 쓰면서도 지형 설명을 길게 이어가기 좋아요.",
+    limitText: "Gemma 계열은 월 단위가 아니라 프로젝트별 일일 요청(RPD) 제한이 적용돼요.",
+    description: "31B보다 가볍게 쓰면서도 지형 설명을 길게 이어가기 좋아요. 실제 하루 한도는 AI Studio의 Rate limits에서 확인해 주세요.",
   },
   {
     id: "gemini-3.1-flash-lite",
     label: "Gemini 3.1 Flash Lite",
     badge: "빠른 응답",
-    limitText: "Gemini 3.1 Flash Lite는 답이 바로 나오는 빠른 모델이고, 한 달에 약 500번 사용할 수 있어요.",
-    description: "Gemini 3.1 Flash는 한 달에 약 20번만 사용할 수 있어, 수업용 기본 빠른 모델은 Lite로 맞췄어요.",
+    limitText: "Flash Lite 계열도 월 단위가 아니라 프로젝트별 일일 요청(RPD) 제한이 적용돼요.",
+    description: "답이 빠른 수업용 모델이에요. 실제 하루 한도는 AI Studio의 Rate limits에서 확인해 주세요.",
   },
 ];
 
