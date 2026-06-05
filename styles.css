@@ -457,6 +457,11 @@ button {
   padding: 0 14px;
 }
 
+.clear-drawing-button {
+  min-width: 62px;
+  padding: 0 12px;
+}
+
 .icon-button:hover,
 .soft-button:hover,
 .primary-button:hover,
