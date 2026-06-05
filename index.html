@@ -4,7 +4,7 @@
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>AI 우주탐사, 달과 화성</title>
-    <link rel="stylesheet" href="styles.css?v=20260604-answerfilter">
+    <link rel="stylesheet" href="styles.css?v=20260605-answerlevel">
   </head>
   <body>
     <div class="starfield" aria-hidden="true"></div>
@@ -45,7 +45,7 @@
         </div>
 
         <div class="home-actions">
-          <button id="homeSettingsBtn" class="soft-button" type="button">⚙️ AI 모델 설정</button>
+          <button id="homeSettingsBtn" class="soft-button" type="button">⚙️ AI 답변 설정</button>
           <button id="homeHistoryBtn" class="soft-button" type="button">🗂️ 탐사 기록</button>
           <button id="homePlanBtn" class="soft-button" type="button">📝 탐사 계획표</button>
         </div>
@@ -84,12 +84,11 @@
               <button id="zoomOutBtn" class="icon-button" type="button" title="축소">−</button>
               <span id="zoomLevel" class="zoom-level">1×</span>
               <button id="zoomInBtn" class="icon-button" type="button" title="확대">+</button>
-              <button id="zoomResetBtn" class="icon-button" type="button" title="확대 초기화">⤢</button>
             </div>
 
             <div class="tool-group" aria-label="그리기 도구">
               <button id="drawToggleBtn" class="icon-button" type="button" title="동그라미 그리기">✏️</button>
-              <button id="clearBtn" class="icon-button" type="button" title="그림 지우기">↺</button>
+              <button id="clearBtn" class="icon-button" type="button" title="그림 지우기">🪌</button>
             </div>
 
             <label id="elevationControl" class="range-tool hidden" title="달 고도 지도 겹치기">
@@ -97,10 +96,10 @@
               <input id="elevationRange" type="range" min="0" max="80" value="42">
             </label>
 
-            <button id="analyzeBtn" class="primary-button" type="button">🔬 전문가 분석 요청</button>
+            <button id="analyzeBtn" class="primary-button" type="button">💡 전문가 분석 요청</button>
 
             <div class="tool-group" aria-label="저장 도구">
-              <button id="settingsBtn" class="icon-button" type="button" title="AI 모델 설정">⚙️</button>
+              <button id="settingsBtn" class="icon-button" type="button" title="AI 답변 설정">⚙️</button>
               <button id="historyBtn" class="icon-button" type="button" title="탐사 기록">🗂️</button>
               <button id="planBtn" class="icon-button" type="button" title="탐사 계획표">📝</button>
             </div>
@@ -159,15 +158,15 @@
           <button class="icon-button close-modal" type="button" data-close="planModal" title="닫기">×</button>
         </div>
         <div class="plan-grid">
-          <label>
+          <label class="plan-goal-field">
             <span>탐사 목표</span>
             <textarea id="planGoal" rows="4" placeholder="예: 달의 밝은 선 조사"></textarea>
           </label>
-          <label>
+          <label class="plan-steps-field">
             <span>탐사 순서</span>
             <textarea id="planSteps" rows="7" placeholder="1. 달 지도에서 큰 크레이터 찾기&#10;2. 고도 지도를 겹쳐 보기"></textarea>
           </label>
-          <label>
+          <label class="plan-findings-field">
             <span>발견한 점</span>
             <textarea id="planFindings" rows="7" placeholder="오늘 발견한 지형과 질문을 적어 보세요"></textarea>
           </label>
@@ -184,9 +183,19 @@
         <div class="modal-head">
           <div>
             <p class="modal-eyebrow">선생님 설정</p>
-            <h2 id="settingsTitle">AI 모델 설정</h2>
+            <h2 id="settingsTitle">AI 답변 설정</h2>
           </div>
           <button class="icon-button close-modal" type="button" data-close="settingsModal" title="닫기">×</button>
+        </div>
+        <section class="answer-level-setting" aria-labelledby="answerLevelTitle">
+          <div class="setting-section-head">
+            <h3 id="answerLevelTitle">답변 단계</h3>
+            <p id="answerLevelSavedText">현재 답변 단계: 쉬움</p>
+          </div>
+          <div id="answerLevelOptions" class="answer-level-options" aria-label="답변 난이도 선택"></div>
+        </section>
+        <div class="setting-section-head model-setting-head">
+          <h3>사용할 AI 모델</h3>
         </div>
         <div id="modelOptions" class="model-options" aria-label="사용할 AI 모델 선택"></div>
         <label class="custom-model-field">
@@ -194,11 +203,29 @@
           <input id="customModelInput" type="text" placeholder="예: gemini-3.1-flash-lite" autocomplete="off">
         </label>
         <p id="modelSavedText" class="model-saved-text">선택한 모델이 자동 저장됩니다.</p>
+        <section class="source-panel" aria-label="자료 출처">
+          <div>
+            <h3>지형 정보 출처</h3>
+            <ul>
+              <li><a href="https://www.usgs.gov/tools/gazetteer-planetary-nomenclature" target="_blank" rel="noopener noreferrer">USGS/IAU Gazetteer of Planetary Nomenclature</a></li>
+              <li><a href="https://ode.rsl.wustl.edu/moon/map/planetaryfeaturelist.aspx" target="_blank" rel="noopener noreferrer">Lunar Orbital Data Explorer Planetary Feature List</a></li>
+              <li><a href="https://ode.rsl.wustl.edu/mars/map/planetaryfeaturelist.aspx" target="_blank" rel="noopener noreferrer">Mars Orbital Data Explorer Planetary Feature List</a></li>
+            </ul>
+          </div>
+          <div>
+            <h3>사진 출처</h3>
+            <ul>
+              <li><a href="https://svs.gsfc.nasa.gov/4720" target="_blank" rel="noopener noreferrer">NASA SVS CGI Moon Kit</a></li>
+              <li><a href="https://astrogeology.usgs.gov/search/map/mars_viking_colorized_global_mosaic_232m" target="_blank" rel="noopener noreferrer">USGS Mars Viking Colorized Global Mosaic</a></li>
+              <li><a href="https://science.nasa.gov/mission/mars-2020-perseverance/" target="_blank" rel="noopener noreferrer">NASA Mars 2020 Perseverance Mission</a></li>
+            </ul>
+          </div>
+        </section>
       </div>
     </div>
 
     <div id="toast" class="toast hidden" role="status" aria-live="polite"></div>
 
-    <script src="script.js?v=20260604-answerfilter"></script>
+    <script src="script.js?v=20260605-followupscroll"></script>
   </body>
 </html>
