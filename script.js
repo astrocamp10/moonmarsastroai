@@ -7,6 +7,10 @@ const HISTORY_KEY = "moonMarsAstroAI.history.v1";
 const PLAN_KEY = "moonMarsAstroAI.plan.v1";
 const MODEL_KEY = "moonMarsAstroAI.model.v1";
 const ANSWER_LEVEL_KEY = "moonMarsAstroAI.answerLevel.v1";
+const USER_NAME_KEY = "moonMarsAstroAI.userName.v1";
+const ARCHIVE_DB_NAME = "moonMarsAstroAI.archiveDB.v1";
+const ARCHIVE_STORE_NAME = "questionArchives";
+const ARCHIVE_SERVER_ENDPOINT = "/api/archive";
 const DEFAULT_MODEL_ID = "gemini-3.1-flash-lite";
 const DEFAULT_ANSWER_LEVEL_KEY = "easy";
 
@@ -21,22 +25,22 @@ const MODEL_PRESETS = [
     id: "gemma-4-31b-it",
     label: "Gemma 4 31B",
     badge: "깊게 분석",
-    limitText: "Gemma 계열은 월 단위가 아니라 프로젝트별 일일 요청(RPD) 제한이 적용돼요.",
-    description: "복잡한 달·화성 지형을 더 차분하게 비교할 때 좋아요. 실제 하루 한도는 AI Studio의 Rate limits에서 확인해 주세요.",
+    limitText: "추론 과정이 있어 복잡한 작업 잘하지만 답변이 느려요.",
+    description: "하루에 최대 1500번 사용할 수 있어요.",
   },
   {
     id: "gemma-4-26b-it",
     label: "Gemma 4 26B",
     badge: "균형형",
-    limitText: "Gemma 계열은 월 단위가 아니라 프로젝트별 일일 요청(RPD) 제한이 적용돼요.",
-    description: "31B보다 가볍게 쓰면서도 지형 설명을 길게 이어가기 좋아요. 실제 하루 한도는 AI Studio의 Rate limits에서 확인해 주세요.",
+    limitText: "추론 과정이 있어 복잡한 작업 잘하지만 답변이 느려요.",
+    description: "하루에 최대 1500번 사용할 수 있어요.",
   },
   {
     id: "gemini-3.1-flash-lite",
     label: "Gemini 3.1 Flash Lite",
     badge: "빠른 응답",
-    limitText: "Flash Lite 계열도 월 단위가 아니라 프로젝트별 일일 요청(RPD) 제한이 적용돼요.",
-    description: "답이 빠른 수업용 모델이에요. 실제 하루 한도는 AI Studio의 Rate limits에서 확인해 주세요.",
+    limitText: "빠르게 답변하며 간단한 질문에 최고에요.",
+    description: "하루에 최대 500번 사용할 수 있어요.",
   },
 ];
 
@@ -141,12 +145,12 @@ const bodies = {
 };
 
 const roverImages = [
+  "mars_robo/Mars_Perseverance_SIF_1555_0804985824_601EBY_N0770000SRLC00336_0000LMJ.png",
   "mars_robo/Mars_Perseverance_FLF_1513_0801260057_395ECM_N0740000FHAZ02008_03_095J.png",
   "mars_robo/Mars_Perseverance_FLF_1785_0825405052_757ECM_N0860510FHAZ00215_04_075J.png",
   "mars_robo/Mars_Perseverance_FLF_1792_0826023946_645ECM_N0870000FHAZ02008_03_095J.png",
   "mars_robo/Mars_Perseverance_NRF_1382_0789615482_909ECM_N0650000NCAM14381_01_195J.png",
   "mars_robo/Mars_Perseverance_NRF_1382_0789615650_909ECM_N0650000NCAM14381_01_195J.png",
-  "mars_robo/Mars_Perseverance_SIF_1555_0804985824_601EBY_N0770000SRLC00336_0000LMJ.png",
   "mars_robo/Mars_Perseverance_ZL0_0961_0752254195_706EBY_N0470000ZCAM03815_0340LMJ.png",
   "mars_robo/Mars_Perseverance_ZR0_1320_0784114966_193EBY_N0612534ZCAM04024_1100LMJ.png",
   "mars_robo/Mars_Perseverance_ZR0_1412_0792297259_894EBY_N0680142ZCAM09468_0340LMJ.png",
@@ -485,6 +489,25 @@ const els = {
   modelOptions: $("#modelOptions"),
   customModelInput: $("#customModelInput"),
   modelSavedText: $("#modelSavedText"),
+  userNameSavedText: $("#userNameSavedText"),
+  settingsNameForm: $("#settingsNameForm"),
+  settingsNameInput: $("#settingsNameInput"),
+  nameModal: $("#nameModal"),
+  nameForm: $("#nameForm"),
+  nameInput: $("#nameInput"),
+  archiveScreen: $("#archiveScreen"),
+  homeArchiveBtn: $("#homeArchiveBtn"),
+  archiveBackBtn: $("#archiveBackBtn"),
+  archiveListPage: $("#archiveListPage"),
+  archiveList: $("#archiveList"),
+  archiveDetailPage: $("#archiveDetailPage"),
+  archiveDetailBackBtn: $("#archiveDetailBackBtn"),
+  archiveDetailMeta: $("#archiveDetailMeta"),
+  archiveDetailTitle: $("#archiveDetailTitle"),
+  archiveDetailBody: $("#archiveDetailBody"),
+  archiveFollowupForm: $("#archiveFollowupForm"),
+  archiveFollowupInput: $("#archiveFollowupInput"),
+  archiveFollowupBtn: $("#archiveFollowupBtn"),
   toast: $("#toast"),
 };
 
@@ -522,6 +545,7 @@ const state = {
   elevationOpacity: 0.42,
   selectedModelId: getInitialModelId(),
   selectedAnswerLevelKey: getInitialAnswerLevelKey(),
+  userName: getStoredUserName(),
   history: loadJson(HISTORY_KEY, []),
   plan: loadJson(PLAN_KEY, {
     goal: "",
@@ -535,6 +559,9 @@ const state = {
   planTimer: null,
   loadingMessageTimer: null,
   loadingMessageIndex: 0,
+  touchPointers: new Map(),
+  pinch: null,
+  currentArchiveRecord: null,
 };
 
 function getInitialModelId() {
@@ -590,23 +617,25 @@ function init() {
   els.backBtn.addEventListener("click", showSelection);
   els.sphereBtn.addEventListener("click", () => setViewMode("sphere"));
   els.flatBtn.addEventListener("click", () => setViewMode("flat"));
-  els.roverBtn.addEventListener("click", () => setViewMode("rover"));
-  els.zoomOutBtn.addEventListener("click", () => stepZoom(-1));
-  els.zoomInBtn.addEventListener("click", () => stepZoom(1));
+  els.roverBtn?.addEventListener("click", () => setViewMode("rover"));
+  els.zoomOutBtn?.addEventListener("click", () => stepZoom(-1));
+  els.zoomInBtn?.addEventListener("click", () => stepZoom(1));
   els.zoomResetBtn?.addEventListener("click", () => resetZoom(true));
   els.drawToggleBtn.addEventListener("click", toggleDrawMode);
   els.clearBtn.addEventListener("click", () => clearDrawing(true));
   els.analyzeBtn.addEventListener("click", analyzeSelection);
   els.settingsBtn.addEventListener("click", openSettings);
   els.homeSettingsBtn.addEventListener("click", openSettings);
-  els.historyBtn.addEventListener("click", openHistory);
-  els.homeHistoryBtn.addEventListener("click", openHistory);
-  els.planBtn.addEventListener("click", openPlan);
+  els.historyBtn?.addEventListener("click", openHistory);
+  els.homeArchiveBtn.addEventListener("click", openArchiveScreen);
+  els.archiveBackBtn.addEventListener("click", showSelection);
+  els.archiveDetailBackBtn.addEventListener("click", showArchiveListPage);
+  els.planBtn?.addEventListener("click", openPlan);
   els.homePlanBtn.addEventListener("click", openPlan);
   els.clearHistoryBtn.addEventListener("click", clearHistory);
   els.clearPlanBtn.addEventListener("click", clearPlan);
 
-  els.elevationRange.addEventListener("input", () => {
+  els.elevationRange?.addEventListener("input", () => {
     state.elevationOpacity = Number(els.elevationRange.value) / 100;
     els.elevationImage.style.opacity = String(state.elevationOpacity);
     scheduleSphereRender();
@@ -622,6 +651,9 @@ function init() {
   });
 
   els.followupForm.addEventListener("submit", submitFollowup);
+  els.archiveFollowupForm.addEventListener("submit", submitArchiveFollowup);
+  els.nameForm.addEventListener("submit", submitNameOnboarding);
+  els.settingsNameForm.addEventListener("submit", submitSettingsName);
   els.customModelInput.addEventListener("change", () => {
     const modelId = els.customModelInput.value.trim();
     if (modelId) {
@@ -656,7 +688,9 @@ function init() {
   renderAnswerLevelOptions();
   renderModelOptions();
   hydratePlan();
+  hydrateUserNameSettings();
   resizeCanvases();
+  ensureUserName();
 }
 
 async function selectBody(bodyKey) {
@@ -673,12 +707,15 @@ async function selectBody(bodyKey) {
   state.lastAnalysis = null;
 
   els.selectionScreen.classList.add("hidden");
+  els.archiveScreen.classList.add("hidden");
   els.exploreScreen.classList.remove("hidden");
-  els.bodyBadge.textContent = `${body.emoji} ${body.name}`;
+  if (els.bodyBadge) {
+    els.bodyBadge.textContent = `${body.emoji} ${body.name}`;
+  }
   els.mapImage.src = body.map;
   els.mapImage.alt = `${body.name} 전체 지도`;
-  els.roverBtn.classList.toggle("hidden", bodyKey !== "mars");
-  els.elevationControl.classList.toggle("hidden", bodyKey !== "moon");
+  els.roverBtn?.classList.toggle("hidden", bodyKey !== "mars");
+  els.elevationControl?.classList.toggle("hidden", bodyKey !== "moon");
 
   if (body.elevation) {
     els.elevationImage.src = body.elevation;
@@ -707,6 +744,7 @@ function showSelection() {
   state.strokes = [];
   state.lastAnalysis = null;
   els.exploreScreen.classList.add("hidden");
+  els.archiveScreen.classList.add("hidden");
   els.selectionScreen.classList.remove("hidden");
   renderDrawing();
 }
@@ -722,7 +760,7 @@ function setViewMode(mode, options = {}) {
   els.roverTray.classList.toggle("hidden", mode !== "rover");
   els.sphereBtn.classList.toggle("active", mode === "sphere");
   els.flatBtn.classList.toggle("active", mode === "flat");
-  els.roverBtn.classList.toggle("active", mode === "rover");
+  els.roverBtn?.classList.toggle("active", mode === "rover");
 
   if (mode === "rover") {
     setRoverImage(state.roverIndex);
@@ -735,13 +773,10 @@ function setViewMode(mode, options = {}) {
 
   if (mode === "sphere") {
     state.drawMode = false;
-    els.coordChip.textContent = "좌우로 돌려 보세요";
   } else if (mode === "flat") {
-    state.drawMode = true;
-    els.coordChip.textContent = "궁금한 곳에 동그라미를 그려요";
+    state.drawMode = false;
   } else {
-    state.drawMode = true;
-    els.coordChip.textContent = "로버 사진에서 암석을 표시해요";
+    state.drawMode = false;
   }
 
   updateDrawButton();
@@ -785,7 +820,7 @@ function zoomTo(nextScale, focalPoint = getCanvasCenter()) {
   if (!state.bodyKey) return;
 
   if (state.viewMode === "sphere") {
-    state.sphereZoom = clamp(nextScale, 0.75, 1.75);
+    state.sphereZoom = clamp(nextScale, 0.75, 2.4);
     updateZoomControls();
     renderDrawing();
     scheduleSphereRender();
@@ -793,7 +828,7 @@ function zoomTo(nextScale, focalPoint = getCanvasCenter()) {
   }
 
   const previous = state.viewport.scale;
-  const scale = clamp(nextScale, 1, 4);
+  const scale = clamp(nextScale, 1, 6);
   const center = getCanvasCenter();
   const ratio = scale / previous;
   state.viewport.x = (focalPoint.x - center.x) * (1 - ratio) + state.viewport.x * ratio;
@@ -863,11 +898,12 @@ function applyViewportTransform() {
 }
 
 function updateZoomControls() {
+  if (!els.zoomLevel || !els.zoomOutBtn || !els.zoomInBtn) return;
   const zoom = getActiveZoom();
   const zoomText = zoom.toFixed(zoom >= 2 ? 1 : 2).replace(/\.?0+$/, "");
   els.zoomLevel.textContent = `${zoomText}×`;
   els.zoomOutBtn.disabled = zoom <= (state.viewMode === "sphere" ? 0.76 : 1.01);
-  els.zoomInBtn.disabled = zoom >= (state.viewMode === "sphere" ? 1.74 : 3.99);
+  els.zoomInBtn.disabled = zoom >= (state.viewMode === "sphere" ? 2.39 : 5.99);
 }
 
 function buildRoverTray() {
@@ -926,6 +962,15 @@ function onPointerDown(event) {
   if (!state.bodyKey) return;
   event.preventDefault();
   els.drawCanvas.setPointerCapture(event.pointerId);
+
+  if (event.pointerType === "touch") {
+    trackTouchPointer(event);
+    if (state.touchPointers.size >= 2) {
+      startPinchGesture();
+      return;
+    }
+  }
+
   state.activePointerId = event.pointerId;
 
   if (state.drawMode) {
@@ -967,6 +1012,15 @@ function onPointerDown(event) {
 }
 
 function onPointerMove(event) {
+  if (event.pointerType === "touch" && state.touchPointers.has(event.pointerId)) {
+    trackTouchPointer(event);
+    if (state.pinch) {
+      event.preventDefault();
+      updatePinchGesture();
+      return;
+    }
+  }
+
   if (event.pointerId !== state.activePointerId) return;
   event.preventDefault();
 
@@ -1021,10 +1075,89 @@ function onPointerMove(event) {
 }
 
 function endPointerAction(event) {
+  if (event?.pointerType === "touch" && state.touchPointers.has(event.pointerId)) {
+    state.touchPointers.delete(event.pointerId);
+    if (state.pinch) {
+      endPinchGesture();
+      return;
+    }
+  }
+
   if (event && event.pointerId !== state.activePointerId) return;
+
+  const completedDrawing = state.isDrawing && state.activeStroke && state.activeStroke.points.length >= 2;
 
   if (state.isDrawing && state.activeStroke && state.activeStroke.points.length < 2) {
     state.strokes.pop();
+  }
+
+  state.isDrawing = false;
+  state.isRotating = false;
+  state.isPanning = false;
+  state.activePointerId = null;
+  state.activeStroke = null;
+  state.lastPointer = null;
+
+  if (completedDrawing) {
+    state.drawMode = false;
+  }
+
+  updateDrawButton();
+  renderDrawing();
+}
+
+function trackTouchPointer(event) {
+  state.touchPointers.set(event.pointerId, pointerPoint(event));
+}
+
+function getTouchPoints() {
+  return Array.from(state.touchPointers.values());
+}
+
+function getPinchCenter(points) {
+  return {
+    x: (points[0].x + points[1].x) / 2,
+    y: (points[0].y + points[1].y) / 2,
+  };
+}
+
+function startPinchGesture() {
+  const points = getTouchPoints();
+  if (points.length < 2) return;
+
+  cancelActivePointerAction(true);
+  state.drawMode = false;
+  state.pinch = {
+    startDistance: Math.max(8, distance(points[0], points[1])),
+    startZoom: getActiveZoom(),
+  };
+  updatePinchGesture();
+}
+
+function updatePinchGesture() {
+  const points = getTouchPoints();
+  if (!state.pinch || points.length < 2) return;
+
+  const pinchDistance = Math.max(8, distance(points[0], points[1]));
+  const center = getPinchCenter(points);
+  const nextZoom = state.pinch.startZoom * (pinchDistance / state.pinch.startDistance);
+  zoomTo(nextZoom, center);
+}
+
+function endPinchGesture() {
+  state.pinch = null;
+  state.activePointerId = null;
+  state.lastPointer = null;
+  updateDrawButton();
+  renderDrawing();
+}
+
+function cancelActivePointerAction(dropActiveStroke) {
+  if (dropActiveStroke && state.activeStroke) {
+    const index = state.strokes.indexOf(state.activeStroke);
+    if (index >= 0) {
+      state.strokes.splice(index, 1);
+    }
   }
 
   state.isDrawing = false;
@@ -1123,8 +1256,8 @@ function strokePointToGeo(point) {
 }
 
 function getStrokeLineWidth(stroke) {
-  if (stroke.mode === "sphere") return DRAW_STROKE_WIDTH * state.sphereZoom;
-  if (stroke.mode === "flat" || stroke.mode === "rover") return DRAW_STROKE_WIDTH * state.viewport.scale;
+  if (stroke.mode === "sphere") return clamp(DRAW_STROKE_WIDTH / Math.max(state.sphereZoom, 1), 1.6, DRAW_STROKE_WIDTH);
+  if (stroke.mode === "flat" || stroke.mode === "rover") return clamp(DRAW_STROKE_WIDTH / Math.max(state.viewport.scale, 1), 1.4, DRAW_STROKE_WIDTH);
   return DRAW_STROKE_WIDTH;
 }
 
@@ -1393,6 +1526,18 @@ async function analyzeSelection() {
     const prompt = buildAnalysisPrompt(selection);
     const answer = await askGemini(prompt, analysisImage.base64);
 
+    const createdAt = Date.now();
+    const archiveRecord = createArchiveRecord({
+      bodyKey: state.bodyKey,
+      mode: state.viewMode,
+      selection,
+      answer,
+      imageBase64: analysisImage.base64,
+      answerLevelKey: state.selectedAnswerLevelKey,
+      createdAt,
+    });
+
+    state.currentArchiveRecord = archiveRecord;
     state.lastAnalysis = {
       bodyKey: state.bodyKey,
       viewMode: state.viewMode,
@@ -1401,6 +1546,7 @@ async function analyzeSelection() {
       answer,
       imageBase64: analysisImage.base64,
       answerLevelKey: state.selectedAnswerLevelKey,
+      archiveId: archiveRecord.id,
     };
 
     showAnswer(selection, answer, analysisImage.base64);
@@ -1411,8 +1557,13 @@ async function analyzeSelection() {
       answer,
       details: selection.description,
       answerLevelKey: state.selectedAnswerLevelKey,
-      createdAt: Date.now(),
+      createdAt,
     });
+    try {
+      await saveArchiveRecord(archiveRecord);
+    } catch (archiveError) {
+      showToast(`아카이브 저장 중 문제가 생겼어요: ${archiveError.message}`);
+    }
     clearDrawing(false);
   } catch (error) {
     showAnswer(selection, `분석 중 문제가 생겼어요.\n\n${error.message}`, analysisImage?.base64);
@@ -2053,10 +2204,63 @@ async function submitFollowup(event) {
       answerLevelKey: state.selectedAnswerLevelKey,
       createdAt: Date.now(),
     });
+    try {
+      await appendFollowupToArchive(question, answer);
+    } catch (archiveError) {
+      showToast(`이어지는 질문 저장 중 문제가 생겼어요: ${archiveError.message}`);
+    }
   } catch (error) {
     const errorCard = appendAnswerCard("전문가 답변", `추가 답변 중 문제가 생겼어요.\n\n${error.message}`);
     scrollAnswerCardToTop(errorCard);
   } finally {
+    setLoading(false);
+  }
+}
+
+async function submitArchiveFollowup(event) {
+  event.preventDefault();
+  const question = els.archiveFollowupInput.value.trim();
+  if (!question) return;
+
+  if (!apiKey) {
+    els.keyGate.classList.remove("hidden");
+    return;
+  }
+
+  const record = state.currentArchiveRecord;
+  if (!record?.id) {
+    showToast("먼저 아카이브 항목을 열어 주세요.");
+    return;
+  }
+
+  els.archiveFollowupInput.value = "";
+  els.archiveFollowupBtn.disabled = true;
+  appendArchiveSection("이어지는 질문", question);
+  setLoading(true, "AI 전문가가 아카이브 대화를 이어 읽고 있어요...");
+
+  try {
+    const imageBase64 = await getArchiveImageBase64(record);
+    const answerLevel = getActiveAnswerLevel();
+    const prompt = [
+      "아래는 저장된 달·화성 탐사 아카이브의 기존 대화입니다.",
+      archiveMessagesToPromptText(record),
+      `학생의 이어지는 질문: ${question}`,
+      answerLevel.instruction,
+      `기존 아카이브의 사진과 대화 맥락을 이어서 ${answerLevel.audience}에게 쉽고 친절하게 답하세요. ${answerLevel.followupDetail}`,
+      FINAL_RESPONSE_RULES,
+    ].join("\n\n");
+    const answer = await askGemini(prompt, imageBase64);
+    const updatedRecord = addFollowupMessagesToRecord(record, question, answer);
+    updatedRecord.imageBase64 = imageBase64;
+    await saveArchiveRecord(updatedRecord);
+    renderArchiveDetail(updatedRecord);
+    requestAnimationFrame(() => {
+      els.archiveDetailPage.scrollTop = els.archiveDetailPage.scrollHeight;
+    });
+  } catch (error) {
+    appendArchiveSection("답변", `추가 답변 중 문제가 생겼어요.\n\n${error.message}`);
+  } finally {
+    els.archiveFollowupBtn.disabled = false;
     setLoading(false);
   }
 }
@@ -2186,9 +2390,532 @@ function clearHistory() {
   showToast("탐사 기록을 비웠어요.");
 }
 
+function createArchiveRecord({ bodyKey, mode, selection, answer, imageBase64, answerLevelKey, createdAt }) {
+  const body = bodies[bodyKey] || bodies.moon;
+  const userName = state.userName || "인천대원";
+  const fileBaseName = createArchiveBaseName(userName, createdAt);
+  const cleanedAnswer = cleanAiAnswer(answer || "");
+
+  return {
+    id: `${formatArchiveTimestamp(createdAt)}-${Math.random().toString(36).slice(2, 8)}`,
+    userName,
+    createdAt,
+    updatedAt: createdAt,
+    bodyKey,
+    bodyName: body.name,
+    mode,
+    modeLabel: getViewModeLabel(mode),
+    title: selection.title,
+    details: selection.description,
+    answerLevelKey,
+    fileBaseName,
+    markdownName: `${fileBaseName}.md`,
+    imageName: `${fileBaseName}.jpg`,
+    imageBase64,
+    messages: [
+      {
+        role: "question",
+        label: "질문",
+        text: `${selection.title}\n\n${selection.description}`,
+        createdAt,
+      },
+      {
+        role: "answer",
+        label: "답변",
+        text: cleanedAnswer,
+        createdAt,
+      },
+    ],
+  };
+}
+
+async function appendFollowupToArchive(question, answer) {
+  const archiveId = state.lastAnalysis?.archiveId;
+  if (!archiveId) return;
+
+  const record = state.currentArchiveRecord?.id === archiveId
+    ? state.currentArchiveRecord
+    : await getArchiveRecord(archiveId);
+
+  if (!record) return;
+
+  addFollowupMessagesToRecord(record, question, answer);
+  state.currentArchiveRecord = record;
+  await saveArchiveRecord(record);
+}
+
+function addFollowupMessagesToRecord(record, question, answer) {
+  const createdAt = Date.now();
+  record.messages = getArchiveMessages(record);
+  record.messages.push(
+    {
+      role: "followupQuestion",
+      label: "이어지는 질문",
+      text: question,
+      createdAt,
+    },
+    {
+      role: "answer",
+      label: "답변",
+      text: cleanAiAnswer(answer || ""),
+      createdAt,
+    },
+  );
+  record.updatedAt = createdAt;
+  return record;
+}
+
+async function saveArchiveRecord(record) {
+  const archiveRecord = {
+    ...record,
+    markdown: buildArchiveMarkdown(record),
+  };
+
+  let localSaved = false;
+  let serverSaved = false;
+  let localError = null;
+  let serverError = null;
+
+  try {
+    await putLocalArchive(archiveRecord);
+    localSaved = true;
+  } catch (error) {
+    localError = error;
+  }
+
+  try {
+    serverSaved = await postArchiveToServer(archiveRecord);
+  } catch (error) {
+    serverError = error;
+  }
+
+  if (!localSaved && !serverSaved) {
+    throw localError || serverError || new Error("저장소를 사용할 수 없어요.");
+  }
+
+  state.currentArchiveRecord = archiveRecord;
+  return archiveRecord;
+}
+
+async function openArchiveScreen() {
+  closeAllModals();
+  els.selectionScreen.classList.add("hidden");
+  els.exploreScreen.classList.add("hidden");
+  els.archiveScreen.classList.remove("hidden");
+  showArchiveListPage();
+
+  els.archiveList.innerHTML = "";
+  const loading = document.createElement("p");
+  loading.className = "archive-empty";
+  loading.textContent = "아카이브를 불러오고 있어요...";
+  els.archiveList.append(loading);
+
+  try {
+    const records = await loadArchiveRecords();
+    renderArchiveList(records);
+  } catch (error) {
+    els.archiveList.innerHTML = "";
+    const empty = document.createElement("p");
+    empty.className = "archive-empty";
+    empty.textContent = `아카이브를 불러오지 못했어요. ${error.message}`;
+    els.archiveList.append(empty);
+  }
+}
+
+function showArchiveListPage() {
+  els.archiveListPage.classList.remove("hidden");
+  els.archiveDetailPage.classList.add("hidden");
+  els.archiveFollowupInput.value = "";
+  state.currentArchiveRecord = null;
+}
+
+function renderArchiveList(records) {
+  els.archiveList.innerHTML = "";
+
+  if (!records.length) {
+    const empty = document.createElement("p");
+    empty.className = "archive-empty";
+    empty.textContent = "아직 저장된 질문이 없어요. 지도를 표시하고 전문가 분석을 요청해 보세요.";
+    els.archiveList.append(empty);
+    return;
+  }
+
+  records.forEach((record) => {
+    const button = document.createElement("button");
+    button.type = "button";
+    button.className = "archive-list-item";
+    button.addEventListener("click", () => openArchiveDetail(record.id));
+
+    const name = document.createElement("strong");
+    name.textContent = `${record.userName || "인천대원"} 대원`;
+
+    const date = document.createElement("span");
+    date.className = "archive-list-date";
+    date.textContent = formatFullDate(record.createdAt);
+
+    const title = document.createElement("span");
+    title.className = "archive-list-title";
+    title.textContent = record.title || record.question || "저장된 질문";
+
+    button.append(name, date, title);
+    els.archiveList.append(button);
+  });
+}
+
+async function openArchiveDetail(id) {
+  els.archiveDetailBody.innerHTML = "";
+  els.archiveDetailMeta.textContent = "불러오는 중...";
+  els.archiveDetailTitle.textContent = "";
+  els.archiveListPage.classList.add("hidden");
+  els.archiveDetailPage.classList.remove("hidden");
+
+  try {
+    const record = await getArchiveRecord(id);
+    renderArchiveDetail(record);
+  } catch (error) {
+    els.archiveDetailMeta.textContent = "";
+    els.archiveDetailTitle.textContent = "아카이브를 열 수 없어요";
+    appendArchiveSection("오류", error.message);
+  }
+}
+
+function renderArchiveDetail(record) {
+  state.currentArchiveRecord = record;
+  const userName = record.userName || "인천대원";
+  els.archiveDetailMeta.textContent = `${userName} 대원 · ${formatFullDate(record.createdAt)}`;
+  els.archiveDetailTitle.textContent = record.title || "저장된 질문";
+  els.archiveDetailBody.innerHTML = "";
+
+  appendArchiveSection("이름", `${userName} 대원`);
+  appendArchiveSection("날짜", formatFullDate(record.createdAt));
+
+  const imageSrc = getArchiveImageSrc(record);
+  if (imageSrc) {
+    const section = document.createElement("section");
+    section.className = "archive-detail-section archive-photo-section";
+    const title = document.createElement("h3");
+    title.textContent = "사진";
+    const image = document.createElement("img");
+    image.src = imageSrc;
+    image.alt = "질문 시 저장된 저화질 사진";
+    section.append(title, image);
+    els.archiveDetailBody.append(section);
+  }
+
+  getArchiveMessages(record).forEach((message) => {
+    appendArchiveSection(message.label || getMessageLabel(message.role), message.text || "");
+  });
+}
+
+function appendArchiveSection(title, text) {
+  const section = document.createElement("section");
+  section.className = "archive-detail-section";
+  const heading = document.createElement("h3");
+  heading.textContent = title;
+  const body = document.createElement("div");
+  body.textContent = text;
+  section.append(heading, body);
+  els.archiveDetailBody.append(section);
+}
+
+async function loadArchiveRecords() {
+  const localResult = await getLocalArchives().catch(() => []);
+  const serverResult = await fetchServerArchiveList().catch(() => []);
+  const merged = new Map();
+
+  serverResult.forEach((record) => merged.set(record.id, record));
+  localResult.forEach((record) => merged.set(record.id, record));
+
+  return Array.from(merged.values()).sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0));
+}
+
+async function getArchiveRecord(id) {
+  const localRecord = await getLocalArchive(id).catch(() => null);
+  if (localRecord) return localRecord;
+
+  const serverRecord = await fetchServerArchiveDetail(id);
+  if (!serverRecord) throw new Error("저장된 항목을 찾지 못했어요.");
+  return serverRecord;
+}
+
+function getArchiveMessages(record) {
+  if (Array.isArray(record.messages) && record.messages.length) {
+    return record.messages;
+  }
+
+  return [
+    {
+      role: "question",
+      label: "질문",
+      text: [record.question || record.title, record.details].filter(Boolean).join("\n\n"),
+      createdAt: record.createdAt,
+    },
+    {
+      role: "answer",
+      label: "답변",
+      text: record.answer || "",
+      createdAt: record.createdAt,
+    },
+  ];
+}
+
+function getMessageLabel(role) {
+  if (role === "followupQuestion") return "이어지는 질문";
+  if (role === "answer") return "답변";
+  return "질문";
+}
+
+function getArchiveImageSrc(record) {
+  if (record.imageBase64) return `data:image/jpeg;base64,${record.imageBase64}`;
+  if (record.imageUrl) return record.imageUrl;
+  return "";
+}
+
+async function getArchiveImageBase64(record) {
+  if (record.imageBase64) return record.imageBase64;
+  if (!record.imageUrl) {
+    throw new Error("아카이브에 저장된 사진을 찾을 수 없어요.");
+  }
+
+  const response = await fetch(record.imageUrl, {
+    cache: "no-store",
+  });
+  if (!response.ok) {
+    throw new Error("아카이브 사진을 다시 불러오지 못했어요.");
+  }
+
+  const blob = await response.blob();
+  const dataUrl = await blobToDataUrl(blob);
+  const base64 = dataUrl.split(",")[1] || "";
+  if (!base64) {
+    throw new Error("아카이브 사진을 AI가 읽을 수 있는 형식으로 바꾸지 못했어요.");
+  }
+  record.imageBase64 = base64;
+  return base64;
+}
+
+function blobToDataUrl(blob) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(String(reader.result || ""));
+    reader.onerror = () => reject(reader.error || new Error("이미지 변환에 실패했어요."));
+    reader.readAsDataURL(blob);
+  });
+}
+
+function archiveMessagesToPromptText(record) {
+  return getArchiveMessages(record)
+    .map((message) => `${message.label || getMessageLabel(message.role)}: ${message.text || ""}`)
+    .join("\n\n");
+}
+
+function buildArchiveMarkdown(record) {
+  const messages = getArchiveMessages(record);
+  const imageLine = record.imageName ? `![첨부 사진](./${record.imageName})` : "";
+  const lines = [
+    `# ${record.userName || "인천대원"} 질문 아카이브`,
+    "",
+    `- 이름: ${record.userName || "인천대원"} 대원`,
+    `- 날짜/시간: ${formatFullDate(record.createdAt)}`,
+    `- 천체: ${record.bodyName || ""}`,
+    `- 보기: ${record.modeLabel || getViewModeLabel(record.mode)}`,
+    record.imageName ? `- 사진 파일: ${record.imageName}` : "",
+    "",
+    imageLine,
+    "",
+  ].filter((line) => line !== "");
+
+  messages.forEach((message, index) => {
+    const heading = message.role === "followupQuestion"
+      ? `## 이어지는 질문 ${countPreviousMessages(messages, index, "followupQuestion") + 1}`
+      : message.role === "answer" && hasPreviousFollowup(messages, index)
+        ? `## 답변 ${countPreviousMessages(messages, index, "answer")}`
+        : `## ${message.label || getMessageLabel(message.role)}`;
+    lines.push(heading, "", message.text || "", "");
+  });
+
+  return lines.join("\n").trim() + "\n";
+}
+
+function countPreviousMessages(messages, index, role) {
+  return messages.slice(0, index).filter((message) => message.role === role).length;
+}
+
+function hasPreviousFollowup(messages, index) {
+  return messages.slice(0, index).some((message) => message.role === "followupQuestion");
+}
+
+function createArchiveBaseName(userName, createdAt) {
+  return `${sanitizeFilePart(userName || "인천대원")}_${formatArchiveTimestamp(createdAt)}`;
+}
+
+function sanitizeFilePart(value) {
+  const cleaned = sanitizeUserName(value).replace(/[\\/:*?"<>|]/g, "").replace(/\s+/g, "_");
+  return cleaned || "인천대원";
+}
+
+function formatArchiveTimestamp(value) {
+  const date = new Date(value || Date.now());
+  const pad = (number) => String(number).padStart(2, "0");
+  return [
+    date.getFullYear(),
+    pad(date.getMonth() + 1),
+    pad(date.getDate()),
+  ].join("") + "_" + [pad(date.getHours()), pad(date.getMinutes()), pad(date.getSeconds())].join("");
+}
+
+function getViewModeLabel(mode) {
+  if (mode === "sphere") return "구형";
+  if (mode === "flat") return "평면지도";
+  if (mode === "rover") return "로버 사진";
+  return "지도";
+}
+
+function openArchiveDb() {
+  return new Promise((resolve, reject) => {
+    if (!("indexedDB" in window)) {
+      reject(new Error("이 브라우저에서는 IndexedDB를 사용할 수 없어요."));
+      return;
+    }
+
+    const request = indexedDB.open(ARCHIVE_DB_NAME, 1);
+    request.onupgradeneeded = () => {
+      const db = request.result;
+      if (!db.objectStoreNames.contains(ARCHIVE_STORE_NAME)) {
+        const store = db.createObjectStore(ARCHIVE_STORE_NAME, { keyPath: "id" });
+        store.createIndex("createdAt", "createdAt");
+      }
+    };
+    request.onsuccess = () => resolve(request.result);
+    request.onerror = () => reject(request.error || new Error("아카이브 저장소를 열 수 없어요."));
+  });
+}
+
+async function withArchiveStore(mode, callback) {
+  const db = await openArchiveDb();
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction(ARCHIVE_STORE_NAME, mode);
+    const store = tx.objectStore(ARCHIVE_STORE_NAME);
+    const request = callback(store);
+    request.onsuccess = () => resolve(request.result);
+    request.onerror = () => reject(request.error || new Error("아카이브 작업에 실패했어요."));
+    tx.oncomplete = () => db.close();
+    tx.onerror = () => {
+      db.close();
+      reject(tx.error || new Error("아카이브 저장소 오류가 발생했어요."));
+    };
+  });
+}
+
+function putLocalArchive(record) {
+  return withArchiveStore("readwrite", (store) => store.put(record));
+}
+
+function getLocalArchive(id) {
+  return withArchiveStore("readonly", (store) => store.get(id));
+}
+
+async function getLocalArchives() {
+  const records = await withArchiveStore("readonly", (store) => store.getAll());
+  return Array.isArray(records) ? records : [];
+}
+
+async function postArchiveToServer(record) {
+  if (window.location.protocol === "file:") return false;
+
+  const response = await fetch(ARCHIVE_SERVER_ENDPOINT, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      record,
+      markdown: record.markdown || buildArchiveMarkdown(record),
+      imageBase64: record.imageBase64 || "",
+    }),
+  });
+
+  return response.ok;
+}
+
+async function fetchServerArchiveList() {
+  if (window.location.protocol === "file:") return [];
+  const response = await fetch(ARCHIVE_SERVER_ENDPOINT, {
+    cache: "no-store",
+  });
+  if (!response.ok) return [];
+  const data = await response.json();
+  return Array.isArray(data.records) ? data.records : [];
+}
+
+async function fetchServerArchiveDetail(id) {
+  if (window.location.protocol === "file:") return null;
+  const response = await fetch(`${ARCHIVE_SERVER_ENDPOINT}/${encodeURIComponent(id)}`, {
+    cache: "no-store",
+  });
+  if (!response.ok) return null;
+  return response.json();
+}
+
 function openPlan() {
   hydratePlan();
   openModal("planModal");
+}
+
+function ensureUserName() {
+  if (state.userName) return;
+  els.nameModal.classList.remove("hidden");
+  requestAnimationFrame(() => els.nameInput.focus());
+}
+
+function submitNameOnboarding(event) {
+  event.preventDefault();
+  const name = sanitizeUserName(els.nameInput.value);
+  if (!name) {
+    showToast("대원 이름을 입력해 주세요.");
+    return;
+  }
+
+  saveUserName(name);
+  closeModal("nameModal");
+  showToast(`${state.userName} 대원, 환영해요.`);
+}
+
+function submitSettingsName(event) {
+  event.preventDefault();
+  const name = sanitizeUserName(els.settingsNameInput.value);
+  if (!name) {
+    showToast("새 이름을 입력해 주세요.");
+    return;
+  }
+
+  saveUserName(name);
+  showToast(`이름을 ${state.userName} 대원으로 저장했어요.`);
+}
+
+function saveUserName(name) {
+  state.userName = sanitizeUserName(name);
+  saveJson(USER_NAME_KEY, state.userName);
+  hydrateUserNameSettings();
+}
+
+function hydrateUserNameSettings() {
+  const name = state.userName || "";
+  els.settingsNameInput.value = name;
+  els.userNameSavedText.textContent = name
+    ? `현재 이름: ${name} 대원`
+    : "아카이브 파일 이름에 사용됩니다.";
+}
+
+function getStoredUserName() {
+  return sanitizeUserName(loadJson(USER_NAME_KEY, ""));
+}
+
+function sanitizeUserName(value) {
+  return String(value || "")
+    .trim()
+    .replace(/\s+/g, " ")
+    .slice(0, 24);
 }
 
 function hydratePlan() {
@@ -2230,6 +2957,7 @@ function clearPlan() {
 }
 
 function openSettings() {
+  hydrateUserNameSettings();
   renderAnswerLevelOptions();
   renderModelOptions();
   openModal("settingsModal");
@@ -2286,8 +3014,10 @@ function getActiveAnswerLevel() {
 }
 
 function getSystemPrompt() {
+  const userName = state.userName || "인천대원";
   return [
     SYSTEM_PROMPT,
+    `학생의 이름은 ${userName}입니다. 답변 중 자연스럽게 부를 때는 '${userName} 대원'이라고 불러 주세요.`,
     getActiveAnswerLevel().instruction,
   ].join("\n");
 }
@@ -2358,31 +3088,7 @@ function getActiveModelIds() {
 }
 
 function updateCoordChip(point) {
-  if (!state.bodyKey) return;
-
-  if (state.viewMode === "rover") {
-    const rect = getDisplayedImageRect("rover");
-    if (!pointInRect(point, rect)) {
-      els.coordChip.textContent = "사진 안쪽에 표시해 주세요";
-      return;
-    }
-    const x = ((point.x - rect.x) / rect.width) * 100;
-    const y = ((point.y - rect.y) / rect.height) * 100;
-    els.coordChip.textContent = `사진 x ${x.toFixed(1)}%, y ${y.toFixed(1)}%`;
-    return;
-  }
-
-  let geo = null;
-  if (state.viewMode === "sphere") {
-    geo = spherePointToGeo(point.x, point.y);
-  } else {
-    const rect = getDisplayedImageRect("flat");
-    if (pointInRect(point, rect)) {
-      geo = uvToGeo((point.x - rect.x) / rect.width, (point.y - rect.y) / rect.height);
-    }
-  }
-
-  els.coordChip.textContent = geo ? `${formatLat(geo.lat)} · ${formatLon(geo.lon)}` : "지도 안쪽에 표시해 주세요";
+  void point;
 }
 
 function spherePointToGeo(x, y) {
@@ -2557,7 +3263,7 @@ function closeModal(id) {
 }
 
 function closeAllModals() {
-  [els.answerModal, els.historyModal, els.planModal].forEach((modal) => modal.classList.add("hidden"));
+  [els.answerModal, els.historyModal, els.planModal, els.settingsModal].forEach((modal) => modal.classList.add("hidden"));
 }
 
 function loadJson(key, fallback) {
@@ -2592,6 +3298,18 @@ function formatDate(value) {
     day: "numeric",
     hour: "2-digit",
     minute: "2-digit",
+  }).format(new Date(value));
+}
+
+function formatFullDate(value) {
+  if (!value) return "";
+  return new Intl.DateTimeFormat("ko-KR", {
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    second: "2-digit",
   }).format(new Date(value));
 }
 

@@ -46,7 +46,7 @@
 
         <div class="home-actions">
           <button id="homeSettingsBtn" class="soft-button" type="button">⚙️ AI 답변 설정</button>
-          <button id="homeHistoryBtn" class="soft-button" type="button">🗂️ 탐사 기록</button>
+          <button id="homeArchiveBtn" class="soft-button" type="button">🗂️ 인천대원 질문 아카이브</button>
           <button id="homePlanBtn" class="soft-button" type="button">📝 탐사 계획표</button>
         </div>
 
@@ -72,7 +72,6 @@
 
           <div class="hud top-hud">
             <button id="backBtn" class="icon-button" type="button" title="처음 화면">←</button>
-            <div id="bodyBadge" class="body-badge">🌕 달</div>
 
             <div class="tool-group" aria-label="보기 도구">
               <button id="sphereBtn" class="icon-button active" type="button" title="구형 보기">🌐</button>
@@ -80,35 +79,52 @@
               <button id="roverBtn" class="icon-button hidden" type="button" title="로버 사진">🚙</button>
             </div>
 
-            <div id="zoomControls" class="tool-group zoom-tools" aria-label="확대 도구">
-              <button id="zoomOutBtn" class="icon-button" type="button" title="축소">−</button>
-              <span id="zoomLevel" class="zoom-level">1×</span>
-              <button id="zoomInBtn" class="icon-button" type="button" title="확대">+</button>
-            </div>
-
             <div class="tool-group" aria-label="그리기 도구">
               <button id="drawToggleBtn" class="icon-button" type="button" title="동그라미 그리기">✏️</button>
               <button id="clearBtn" class="soft-button clear-drawing-button" type="button" title="동그라미 지우기">지우기</button>
             </div>
 
-            <label id="elevationControl" class="range-tool hidden" title="달 고도 지도 겹치기">
-              <span>⛰️</span>
-              <input id="elevationRange" type="range" min="0" max="80" value="42">
-            </label>
-
-            <button id="analyzeBtn" class="primary-button" type="button">💡 전문가 분석 요청</button>
-
-            <div class="tool-group" aria-label="저장 도구">
-              <button id="settingsBtn" class="icon-button" type="button" title="AI 답변 설정">⚙️</button>
-              <button id="historyBtn" class="icon-button" type="button" title="탐사 기록">🗂️</button>
-              <button id="planBtn" class="icon-button" type="button" title="탐사 계획표">📝</button>
-            </div>
+            <button id="settingsBtn" class="icon-button" type="button" title="AI 답변 설정">⚙️</button>
           </div>
 
-          <div id="coordChip" class="coord-chip">좌우로 돌려 보세요</div>
+          <label id="elevationControl" class="hud range-tool elevation-hud hidden" title="달 음영 조절">
+            <span aria-hidden="true">⛰️</span>
+            <input id="elevationRange" type="range" min="0" max="80" value="42" aria-label="달 음영 조절">
+          </label>
+
+          <button id="analyzeBtn" class="primary-button bottom-analyze-button" type="button">전문가 분석 요청</button>
 
           <div id="roverTray" class="rover-tray hidden" aria-label="로버 사진 목록"></div>
         </div>
+      </section>
+
+      <section id="archiveScreen" class="screen archive-screen hidden" aria-labelledby="archiveTitle">
+        <header class="archive-topbar">
+          <button id="archiveBackBtn" class="icon-button" type="button" title="처음 화면">←</button>
+          <div>
+            <p class="modal-eyebrow">저장된 질문</p>
+            <h1 id="archiveTitle">인천대원 질문 아카이브</h1>
+          </div>
+        </header>
+
+        <div id="archiveListPage" class="archive-page">
+          <div id="archiveList" class="archive-list"></div>
+        </div>
+
+        <article id="archiveDetailPage" class="archive-page archive-detail hidden" aria-live="polite">
+          <div class="archive-detail-head">
+            <button id="archiveDetailBackBtn" class="soft-button" type="button">목록으로</button>
+            <div>
+              <p id="archiveDetailMeta" class="archive-detail-meta"></p>
+              <h2 id="archiveDetailTitle"></h2>
+            </div>
+          </div>
+          <div id="archiveDetailBody" class="archive-detail-body"></div>
+          <form id="archiveFollowupForm" class="archive-followup-form">
+            <input id="archiveFollowupInput" type="text" placeholder="이 아카이브에서 이어 질문하기" autocomplete="off">
+            <button id="archiveFollowupBtn" class="primary-button" type="submit">질문</button>
+          </form>
+        </article>
       </section>
     </main>
 
@@ -187,6 +203,16 @@
           </div>
           <button class="icon-button close-modal" type="button" data-close="settingsModal" title="닫기">×</button>
         </div>
+        <section class="user-name-setting" aria-labelledby="userNameTitle">
+          <div class="setting-section-head">
+            <h3 id="userNameTitle">대원 이름</h3>
+            <p id="userNameSavedText">아카이브 파일 이름에 사용됩니다.</p>
+          </div>
+          <form id="settingsNameForm" class="name-inline-form">
+            <input id="settingsNameInput" type="text" maxlength="24" autocomplete="name" placeholder="예: 인천대원">
+            <button class="soft-button" type="submit">변경</button>
+          </form>
+        </section>
         <section class="answer-level-setting" aria-labelledby="answerLevelTitle">
           <div class="setting-section-head">
             <h3 id="answerLevelTitle">답변 단계</h3>
@@ -221,6 +247,24 @@
             </ul>
           </div>
         </section>
+      </div>
+    </div>
+
+    <div id="nameModal" class="modal hidden" role="dialog" aria-modal="true" aria-labelledby="nameTitle">
+      <div class="modal-panel name-panel">
+        <div class="modal-head">
+          <div>
+            <p class="modal-eyebrow">탐사 시작 전</p>
+            <h2 id="nameTitle">대원 이름을 알려 주세요</h2>
+          </div>
+        </div>
+        <form id="nameForm" class="name-form">
+          <label>
+            <span>이름</span>
+            <input id="nameInput" type="text" maxlength="24" autocomplete="name" placeholder="예: 인천대원" required>
+          </label>
+          <button class="primary-button" type="submit">시작하기</button>
+        </form>
       </div>
     </div>
 
