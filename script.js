@@ -2397,11 +2397,12 @@ function clearHistory() {
 function createArchiveRecord({ bodyKey, mode, selection, answer, imageBase64, answerLevelKey, createdAt }) {
   const body = bodies[bodyKey] || bodies.moon;
   const userName = state.userName || "인천대원";
+  const archiveId = createArchiveId(createdAt);
   const fileBaseName = createArchiveBaseName(userName, createdAt);
   const cleanedAnswer = cleanAiAnswer(answer || "");
 
   return {
-    id: createArchiveId(createdAt),
+    id: archiveId,
     userName,
     createdAt,
     updatedAt: createdAt,
@@ -2415,6 +2416,7 @@ function createArchiveRecord({ bodyKey, mode, selection, answer, imageBase64, an
     fileBaseName,
     markdownName: `${fileBaseName}.md`,
     imageName: `${fileBaseName}.jpg`,
+    imagePath: getSupabaseArchiveImagePath({ id: archiveId, imageName: `${fileBaseName}.jpg` }),
     imageBase64,
     messages: [
       {
@@ -2865,11 +2867,40 @@ function encodeStoragePath(path) {
     .join("/");
 }
 
+function getSupabaseArchiveImagePath(record) {
+  if (isSafeSupabaseStoragePath(record?.imagePath)) return record.imagePath;
+
+  const extension = getSafeImageExtension(record?.imageName);
+  const id = sanitizeStoragePathPart(record?.id || createArchiveId(Date.now()));
+  return `images/${id}.${extension}`;
+}
+
+function isSafeSupabaseStoragePath(path) {
+  const value = String(path || "");
+  if (!value || value.includes("//")) return false;
+  if (!/^[A-Za-z0-9._/-]+$/.test(value)) return false;
+  return value.split("/").every((part) => part && part !== "." && part !== "..");
+}
+
+function sanitizeStoragePathPart(value) {
+  return String(value || "")
+    .replace(/[^A-Za-z0-9._-]/g, "-")
+    .replace(/-+/g, "-")
+    .replace(/^-|-$/g, "")
+    || createArchiveId(Date.now());
+}
+
+function getSafeImageExtension(fileName) {
+  const match = String(fileName || "").toLowerCase().match(/\.([a-z0-9]{2,5})$/);
+  const extension = match ? match[1] : "jpg";
+  return ["jpg", "jpeg", "png", "webp"].includes(extension) ? extension : "jpg";
+}
+
 async function saveSupabaseArchiveRecord(record) {
   if (!hasSupabaseConfig()) throw new Error("Supabase 설정이 없어요.");
 
-  const intendedImagePath = record.imagePath || record.imageName || `${record.id}.jpg`;
-  let imagePath = record.imagePath || "";
+  const intendedImagePath = getSupabaseArchiveImagePath(record);
+  let imagePath = isSafeSupabaseStoragePath(record.imagePath) ? record.imagePath : "";
   let imageUploadError = null;
 
   if (record.imageBase64) {
@@ -2880,8 +2911,8 @@ async function saveSupabaseArchiveRecord(record) {
       imageUploadError = error;
       console.warn("Supabase archive image upload failed:", error);
     }
-  } else if (record.imageName) {
-    imagePath = record.imagePath || record.imageName;
+  } else if (isSafeSupabaseStoragePath(record.imagePath)) {
+    imagePath = record.imagePath;
   }
 
   const row = archiveRecordToSupabaseRow({
@@ -2970,7 +3001,7 @@ function archiveRecordToSupabaseRow(record) {
     mode_label: record.modeLabel || getViewModeLabel(record.mode),
     details: record.details || "",
     answer_level_key: record.answerLevelKey || "",
-    image_path: record.imagePath || record.imageName || "",
+    image_path: isSafeSupabaseStoragePath(record.imagePath) ? record.imagePath : "",
     messages: getArchiveMessages(record),
     created_at: new Date(record.createdAt || Date.now()).toISOString(),
     updated_at: new Date(record.updatedAt || Date.now()).toISOString(),
@@ -2978,7 +3009,7 @@ function archiveRecordToSupabaseRow(record) {
 }
 
 function supabaseRowToArchiveRecord(row) {
-  const imagePath = row.image_path || "";
+  const imagePath = isSafeSupabaseStoragePath(row.image_path) ? row.image_path : "";
   const createdAt = row.created_at ? new Date(row.created_at).getTime() : Date.now();
   const updatedAt = row.updated_at ? new Date(row.updated_at).getTime() : createdAt;
   return {
