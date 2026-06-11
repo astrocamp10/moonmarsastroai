@@ -122,6 +122,13 @@ const FINAL_RESPONSE_RULES = [
   "중간 또는 어려움 단계에서는 이름 있는 지형의 대략적인 크기와 착륙지·후보지·탐사선 관련 여부를 확실한 범위에서 포함하세요. 모르는 내용은 추측하지 말고 확실하지 않다고 말하세요.",
 ].join("\n");
 
+const FOLLOWUP_QUESTION_RULES = [
+  "마지막의 다음 관찰 질문은 반드시 바로 앞 답변에서 설명한 핵심 지형, 생성 과정, 관찰 근거 중 하나를 이어서 물어보세요.",
+  "답변의 중심이 달의 바다라면 달의 바다의 색, 평탄함, 용암 평원, 나이 차이, 가장자리, 주변 크레이터와의 관계처럼 바다와 직접 관련된 질문만 하세요.",
+  "답변의 중심이 광조, 크레이터, 협곡, 화산, 로버 암석이라면 그 주제 안에서만 추가 질문을 만들고, 답변에서 다루지 않은 다른 지형으로 갑자기 넘어가지 마세요.",
+  "마지막 질문은 학생이 방금 들은 설명을 더 관찰하게 만드는 한 문장으로 쓰고, 새 주제를 소개하는 질문은 피하세요.",
+].join("\n");
+
 const bodies = {
   moon: {
     key: "moon",
@@ -498,6 +505,9 @@ const els = {
   homeArchiveBtn: $("#homeArchiveBtn"),
   archiveBackBtn: $("#archiveBackBtn"),
   archiveListPage: $("#archiveListPage"),
+  archiveSearchInput: $("#archiveSearchInput"),
+  archiveSearchClear: $("#archiveSearchClear"),
+  archiveSearchSummary: $("#archiveSearchSummary"),
   archiveList: $("#archiveList"),
   archiveDetailPage: $("#archiveDetailPage"),
   archiveDetailBackBtn: $("#archiveDetailBackBtn"),
@@ -561,6 +571,8 @@ const state = {
   touchPointers: new Map(),
   pinch: null,
   currentArchiveRecord: null,
+  archiveRecords: [],
+  archiveSearchQuery: "",
 };
 
 function getInitialModelId() {
@@ -629,6 +641,16 @@ function init() {
   els.homeArchiveBtn.addEventListener("click", openArchiveScreen);
   els.archiveBackBtn.addEventListener("click", showSelection);
   els.archiveDetailBackBtn.addEventListener("click", showArchiveListPage);
+  els.archiveSearchInput?.addEventListener("input", () => {
+    state.archiveSearchQuery = els.archiveSearchInput.value;
+    renderArchiveList();
+  });
+  els.archiveSearchClear?.addEventListener("click", () => {
+    state.archiveSearchQuery = "";
+    els.archiveSearchInput.value = "";
+    renderArchiveList();
+    els.archiveSearchInput.focus();
+  });
   els.planBtn?.addEventListener("click", openPlan);
   els.homePlanBtn.addEventListener("click", openPlan);
   els.clearHistoryBtn.addEventListener("click", clearHistory);
@@ -1960,6 +1982,7 @@ function buildAnalysisPrompt(selection) {
       "사진 속 암석, 모래, 층리, 자갈, 균열처럼 보이는 특징을 중심으로 설명해 주세요.",
       `답변에는 1) 무엇처럼 보이는지, 2) 답변 단계에 맞는 관찰 근거, 3) 그 지형이나 암석이 생겼을 가능성, 4) 화성 지질학에서 왜 흥미로운지, 5) ${answerLevel.audience}이 기억할 쉬운 비유, 6) 다음 관찰 질문 하나를 포함해 주세요.`,
       FINAL_RESPONSE_RULES,
+      FOLLOWUP_QUESTION_RULES,
     ].join("\n");
   }
 
@@ -1983,6 +2006,7 @@ function buildAnalysisPrompt(selection) {
       : "",
     "답변에는 1) 표시한 곳의 지형 추정, 2) 답변 단계에 맞는 관찰 근거, 3) 지형이 만들어진 과정, 4) 과학적으로 중요한 점, 5) 쉬운 비유, 6) 더 살펴볼 질문 하나를 포함해 주세요.",
     FINAL_RESPONSE_RULES,
+    FOLLOWUP_QUESTION_RULES,
   ].join("\n");
 }
 
@@ -2189,6 +2213,7 @@ async function submitFollowup(event) {
       answerLevel.instruction,
       `이전 맥락을 이어서 ${answerLevel.audience}에게 쉽고 친절하게 답하세요. ${answerLevel.followupDetail}`,
       FINAL_RESPONSE_RULES,
+      FOLLOWUP_QUESTION_RULES,
     ].join("\n");
     const answer = await askGemini(prompt, state.lastAnalysis.imageBase64);
     const answerCard = appendAnswerCard("전문가 답변", answer);
@@ -2247,6 +2272,7 @@ async function submitArchiveFollowup(event) {
       answerLevel.instruction,
       `기존 아카이브의 사진과 대화 맥락을 이어서 ${answerLevel.audience}에게 쉽고 친절하게 답하세요. ${answerLevel.followupDetail}`,
       FINAL_RESPONSE_RULES,
+      FOLLOWUP_QUESTION_RULES,
     ].join("\n\n");
     const answer = await askGemini(prompt, imageBase64);
     const updatedRecord = addFollowupMessagesToRecord(record, question, answer);
@@ -2502,7 +2528,19 @@ async function saveArchiveRecord(record) {
   }
 
   state.currentArchiveRecord = archiveRecord;
+  upsertArchiveRecordInMemory(archiveRecord);
   return archiveRecord;
+}
+
+function upsertArchiveRecordInMemory(record) {
+  if (!record?.id) return;
+  const index = state.archiveRecords.findIndex((item) => item.id === record.id);
+  if (index >= 0) {
+    state.archiveRecords[index] = record;
+  } else {
+    state.archiveRecords = [record, ...state.archiveRecords];
+  }
+  state.archiveRecords.sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0));
 }
 
 async function openArchiveScreen() {
@@ -2520,8 +2558,11 @@ async function openArchiveScreen() {
 
   try {
     const records = await loadArchiveRecords();
-    renderArchiveList(records);
+    state.archiveRecords = records;
+    renderArchiveList();
   } catch (error) {
+    state.archiveRecords = [];
+    updateArchiveSearchSummary(0, 0);
     els.archiveList.innerHTML = "";
     const empty = document.createElement("p");
     empty.className = "archive-empty";
@@ -2535,20 +2576,34 @@ function showArchiveListPage() {
   els.archiveDetailPage.classList.add("hidden");
   els.archiveFollowupInput.value = "";
   state.currentArchiveRecord = null;
+  if (els.archiveSearchInput) {
+    els.archiveSearchInput.value = state.archiveSearchQuery;
+  }
+  renderArchiveList();
 }
 
-function renderArchiveList(records) {
+function renderArchiveList(records = state.archiveRecords) {
   els.archiveList.innerHTML = "";
+  const allRecords = Array.isArray(records) ? records : [];
+  const query = state.archiveSearchQuery.trim();
+  const searchKey = normalizeArchiveSearchText(query);
+  const visibleRecords = searchKey
+    ? allRecords.filter((record) => getArchiveUserSearchText(record).includes(searchKey))
+    : allRecords;
 
-  if (!records.length) {
+  updateArchiveSearchSummary(allRecords.length, visibleRecords.length);
+
+  if (!visibleRecords.length) {
     const empty = document.createElement("p");
     empty.className = "archive-empty";
-    empty.textContent = "아직 저장된 질문이 없어요. 지도를 표시하고 전문가 분석을 요청해 보세요.";
+    empty.textContent = searchKey
+      ? `"${query}" 대원의 저장된 질문을 찾지 못했어요.`
+      : "아직 저장된 질문이 없어요. 지도를 표시하고 전문가 분석을 요청해 보세요.";
     els.archiveList.append(empty);
     return;
   }
 
-  records.forEach((record) => {
+  visibleRecords.forEach((record) => {
     const button = document.createElement("button");
     button.type = "button";
     button.className = "archive-list-item";
@@ -2568,6 +2623,28 @@ function renderArchiveList(records) {
     button.append(name, date, title);
     els.archiveList.append(button);
   });
+}
+
+function updateArchiveSearchSummary(totalCount, visibleCount) {
+  if (!els.archiveSearchSummary) return;
+  const query = state.archiveSearchQuery.trim();
+  els.archiveSearchSummary.textContent = query
+    ? `"${query}" 검색 결과 ${visibleCount}개 · 전체 ${totalCount}개`
+    : `전체 질문 ${totalCount}개`;
+  if (els.archiveSearchClear) {
+    els.archiveSearchClear.disabled = !query;
+  }
+}
+
+function getArchiveUserSearchText(record) {
+  const name = record?.userName || "인천대원";
+  return normalizeArchiveSearchText(`${name} ${name}대원`);
+}
+
+function normalizeArchiveSearchText(value) {
+  return String(value || "")
+    .toLowerCase()
+    .replace(/\s+/g, "");
 }
 
 async function openArchiveDetail(id) {

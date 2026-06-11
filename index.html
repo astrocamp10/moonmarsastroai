@@ -4,7 +4,7 @@
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>AI 우주탐사, 달과 화성</title>
-    <link rel="stylesheet" href="styles.css?v=20260605-cleartext">
+    <link rel="stylesheet" href="styles.css?v=20260611-archive-name-search">
   </head>
   <body>
     <div class="starfield" aria-hidden="true"></div>
@@ -108,6 +108,14 @@
         </header>
 
         <div id="archiveListPage" class="archive-page">
+          <section class="archive-search" aria-label="대원 이름 검색">
+            <label for="archiveSearchInput">대원 이름 검색</label>
+            <div class="archive-search-row">
+              <input id="archiveSearchInput" type="search" placeholder="예: 홍길동" autocomplete="off">
+              <button id="archiveSearchClear" class="soft-button" type="button">지우기</button>
+            </div>
+            <p id="archiveSearchSummary" class="archive-search-summary">전체 질문 0개</p>
+          </section>
           <div id="archiveList" class="archive-list"></div>
         </div>
 
@@ -209,7 +217,7 @@
             <p id="userNameSavedText">아카이브 파일 이름에 사용됩니다.</p>
           </div>
           <form id="settingsNameForm" class="name-inline-form">
-            <input id="settingsNameInput" type="text" maxlength="24" autocomplete="name" placeholder="예: 인천대원">
+            <input id="settingsNameInput" type="text" maxlength="24" autocomplete="name" placeholder="예: 홍길동">
             <button class="soft-button" type="submit">변경</button>
           </form>
         </section>
@@ -261,7 +269,7 @@
         <form id="nameForm" class="name-form">
           <label>
             <span>이름</span>
-            <input id="nameInput" type="text" maxlength="24" autocomplete="name" placeholder="예: 인천대원" required>
+            <input id="nameInput" type="text" maxlength="24" autocomplete="name" placeholder="예: 홍길동" required>
           </label>
           <button class="primary-button" type="submit">시작하기</button>
         </form>
@@ -270,6 +278,6 @@
 
     <div id="toast" class="toast hidden" role="status" aria-live="polite"></div>
 
-    <script src="script.js?v=20260611-plan-only-cache"></script>
+    <script src="script.js?v=20260611-archive-name-search"></script>
   </body>
 </html>
