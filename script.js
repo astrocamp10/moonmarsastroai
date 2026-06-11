@@ -2619,23 +2619,23 @@ function appendArchiveSection(title, text) {
 }
 
 async function loadArchiveRecords() {
+  const serverResult = await fetchServerArchiveList().catch(() => null);
+  if (Array.isArray(serverResult)) {
+    return serverResult.sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0));
+  }
+
   const localResult = await getLocalArchives().catch(() => []);
-  const serverResult = await fetchServerArchiveList().catch(() => []);
-  const merged = new Map();
-
-  serverResult.forEach((record) => merged.set(record.id, record));
-  localResult.forEach((record) => merged.set(record.id, record));
-
-  return Array.from(merged.values()).sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0));
+  return localResult.sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0));
 }
 
 async function getArchiveRecord(id) {
+  const serverRecord = await fetchServerArchiveDetail(id).catch(() => null);
+  if (serverRecord) return serverRecord;
+
   const localRecord = await getLocalArchive(id).catch(() => null);
   if (localRecord) return localRecord;
 
-  const serverRecord = await fetchServerArchiveDetail(id);
-  if (!serverRecord) throw new Error("저장된 항목을 찾지 못했어요.");
-  return serverRecord;
+  throw new Error("저장된 항목을 찾지 못했어요.");
 }
 
 function getArchiveMessages(record) {
@@ -2839,11 +2839,11 @@ async function postArchiveToServer(record) {
 }
 
 async function fetchServerArchiveList() {
-  if (window.location.protocol === "file:") return [];
+  if (window.location.protocol === "file:") return null;
   const response = await fetch(ARCHIVE_SERVER_ENDPOINT, {
     cache: "no-store",
   });
-  if (!response.ok) return [];
+  if (!response.ok) throw new Error("아카이브 폴더 목록을 불러오지 못했어요.");
   const data = await response.json();
   return Array.isArray(data.records) ? data.records : [];
 }
