@@ -2476,6 +2476,7 @@ async function saveArchiveRecord(record) {
   };
 
   let supabaseSaved = false;
+  let supabaseWarning = null;
   let localSaved = false;
   let serverSaved = false;
   let supabaseError = null;
@@ -2490,9 +2491,13 @@ async function saveArchiveRecord(record) {
       imageBase64: archiveRecord.imageBase64,
       markdown: archiveRecord.markdown,
     };
+    if (supabaseRecord.supabaseImageError) {
+      supabaseWarning = `사진 저장 실패: ${supabaseRecord.supabaseImageError}`;
+    }
     supabaseSaved = true;
   } catch (error) {
     supabaseError = error;
+    console.warn("Supabase archive save failed:", error);
   }
 
   try {
@@ -2510,6 +2515,12 @@ async function saveArchiveRecord(record) {
 
   if (!supabaseSaved && !localSaved && !serverSaved) {
     throw supabaseError || localError || serverError || new Error("저장소를 사용할 수 없어요.");
+  }
+
+  if (!supabaseSaved && supabaseError) {
+    showToast(`Supabase 저장 실패: ${supabaseError.message}`);
+  } else if (supabaseWarning) {
+    showToast(`Supabase ${supabaseWarning}`);
   }
 
   state.currentArchiveRecord = archiveRecord;
@@ -2638,7 +2649,12 @@ function appendArchiveSection(title, text) {
 }
 
 async function loadArchiveRecords() {
-  const supabaseResult = await fetchSupabaseArchiveList().catch(() => null);
+  let supabaseError = null;
+  const supabaseResult = await fetchSupabaseArchiveList().catch((error) => {
+    supabaseError = error;
+    console.warn("Supabase archive list load failed:", error);
+    return null;
+  });
   const serverResult = await fetchServerArchiveList().catch(() => null);
   const staticResult = await fetchStaticArchiveList().catch(() => null);
   const localResult = await getLocalArchives().catch(() => []);
@@ -2650,6 +2666,10 @@ async function loadArchiveRecords() {
       if (record.id) merged.set(record.id, record);
     });
   });
+
+  if (supabaseError) {
+    showToast(`Supabase 불러오기 실패: ${supabaseError.message}`);
+  }
 
   return Array.from(merged.values()).sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0));
 }
@@ -2784,8 +2804,12 @@ function createArchiveBaseName(userName, createdAt) {
 }
 
 function createArchiveId(createdAt) {
-  if (crypto?.randomUUID) return crypto.randomUUID();
-  return `${formatArchiveTimestamp(createdAt)}-${Math.random().toString(36).slice(2, 8)}`;
+  if (globalThis.crypto?.randomUUID) return globalThis.crypto.randomUUID();
+  return "xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx".replace(/[xy]/g, (character) => {
+    const random = Math.floor(Math.random() * 16);
+    const value = character === "x" ? random : (random & 0x3) | 0x8;
+    return value.toString(16);
+  });
 }
 
 function sanitizeFilePart(value) {
@@ -2844,9 +2868,20 @@ function encodeStoragePath(path) {
 async function saveSupabaseArchiveRecord(record) {
   if (!hasSupabaseConfig()) throw new Error("Supabase 설정이 없어요.");
 
-  const imagePath = record.imagePath || record.imageName || `${record.id}.jpg`;
+  const intendedImagePath = record.imagePath || record.imageName || `${record.id}.jpg`;
+  let imagePath = record.imagePath || "";
+  let imageUploadError = null;
+
   if (record.imageBase64) {
-    await uploadSupabaseArchiveImage(imagePath, record.imageBase64);
+    try {
+      await uploadSupabaseArchiveImage(intendedImagePath, record.imageBase64);
+      imagePath = intendedImagePath;
+    } catch (error) {
+      imageUploadError = error;
+      console.warn("Supabase archive image upload failed:", error);
+    }
+  } else if (record.imageName) {
+    imagePath = record.imagePath || record.imageName;
   }
 
   const row = archiveRecordToSupabaseRow({
@@ -2868,7 +2903,11 @@ async function saveSupabaseArchiveRecord(record) {
   }
 
   const data = await response.json().catch(() => []);
-  return normalizeArchiveRecord(supabaseRowToArchiveRecord(Array.isArray(data) ? data[0] || row : data || row));
+  const savedRecord = normalizeArchiveRecord(supabaseRowToArchiveRecord(Array.isArray(data) ? data[0] || row : data || row));
+  if (imageUploadError) {
+    savedRecord.supabaseImageError = imageUploadError.message || "이미지 업로드 정책을 확인해 주세요.";
+  }
+  return savedRecord;
 }
 
 async function uploadSupabaseArchiveImage(path, imageBase64) {
