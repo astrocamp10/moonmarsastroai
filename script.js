@@ -2621,19 +2621,27 @@ function appendArchiveSection(title, text) {
 async function loadArchiveRecords() {
   const serverResult = await fetchServerArchiveList().catch(() => null);
   if (Array.isArray(serverResult)) {
-    return serverResult.sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0));
+    return normalizeArchiveRecords(serverResult).sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0));
+  }
+
+  const staticResult = await fetchStaticArchiveList().catch(() => null);
+  if (Array.isArray(staticResult)) {
+    return normalizeArchiveRecords(staticResult).sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0));
   }
 
   const localResult = await getLocalArchives().catch(() => []);
-  return localResult.sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0));
+  return normalizeArchiveRecords(localResult).sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0));
 }
 
 async function getArchiveRecord(id) {
   const serverRecord = await fetchServerArchiveDetail(id).catch(() => null);
-  if (serverRecord) return serverRecord;
+  if (serverRecord) return normalizeArchiveRecord(serverRecord);
+
+  const staticRecord = await fetchStaticArchiveDetail(id).catch(() => null);
+  if (staticRecord) return normalizeArchiveRecord(staticRecord);
 
   const localRecord = await getLocalArchive(id).catch(() => null);
-  if (localRecord) return localRecord;
+  if (localRecord) return normalizeArchiveRecord(localRecord);
 
   throw new Error("저장된 항목을 찾지 못했어요.");
 }
@@ -2667,17 +2675,19 @@ function getMessageLabel(role) {
 
 function getArchiveImageSrc(record) {
   if (record.imageBase64) return `data:image/jpeg;base64,${record.imageBase64}`;
-  if (record.imageUrl) return record.imageUrl;
+  if (record.imageUrl) return resolveArchiveAssetUrl(record.imageUrl);
+  if (record.imageName) return resolveArchiveAssetUrl(`archives/${record.imageName}`);
   return "";
 }
 
 async function getArchiveImageBase64(record) {
   if (record.imageBase64) return record.imageBase64;
-  if (!record.imageUrl) {
+  const imageUrl = getArchiveImageSrc(record);
+  if (!imageUrl) {
     throw new Error("아카이브에 저장된 사진을 찾을 수 없어요.");
   }
 
-  const response = await fetch(record.imageUrl, {
+  const response = await fetch(imageUrl, {
     cache: "no-store",
   });
   if (!response.ok) {
@@ -2855,6 +2865,47 @@ async function fetchServerArchiveDetail(id) {
   });
   if (!response.ok) return null;
   return response.json();
+}
+
+async function fetchStaticArchiveList() {
+  const response = await fetch(resolveArchiveAssetUrl("archives/index.json"), {
+    cache: "no-store",
+  });
+  if (!response.ok) throw new Error("정적 아카이브 목록을 불러오지 못했어요.");
+  const data = await response.json();
+  return Array.isArray(data.records) ? data.records : [];
+}
+
+async function fetchStaticArchiveDetail(id) {
+  const records = await fetchStaticArchiveList();
+  return records.find((record) => record.id === id) || null;
+}
+
+function normalizeArchiveRecords(records) {
+  return records.map(normalizeArchiveRecord);
+}
+
+function normalizeArchiveRecord(record) {
+  const normalized = { ...record };
+  if (normalized.imageUrl) {
+    normalized.imageUrl = resolveArchiveAssetUrl(normalized.imageUrl);
+  } else if (normalized.imageName) {
+    normalized.imageUrl = resolveArchiveAssetUrl(`archives/${normalized.imageName}`);
+  }
+
+  if (normalized.markdownUrl) {
+    normalized.markdownUrl = resolveArchiveAssetUrl(normalized.markdownUrl);
+  } else if (normalized.markdownName) {
+    normalized.markdownUrl = resolveArchiveAssetUrl(`archives/${normalized.markdownName}`);
+  }
+
+  return normalized;
+}
+
+function resolveArchiveAssetUrl(url) {
+  if (!url) return "";
+  if (/^(?:https?:|data:|blob:)/i.test(url)) return url;
+  return new URL(url.replace(/^\/+/, ""), document.baseURI).toString();
 }
 
 function openPlan() {

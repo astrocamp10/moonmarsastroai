@@ -96,7 +96,7 @@ function safeFileName(value, fallback) {
 }
 
 function publicArchiveUrl(fileName) {
-  return `/archives/${encodeURIComponent(fileName)}`;
+  return `archives/${encodeURIComponent(fileName)}`;
 }
 
 function stripDataUrl(base64) {
