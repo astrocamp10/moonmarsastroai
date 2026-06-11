@@ -11,6 +11,10 @@ const USER_NAME_KEY = "moonMarsAstroAI.userName.v1";
 const ARCHIVE_DB_NAME = "moonMarsAstroAI.archiveDB.v1";
 const ARCHIVE_STORE_NAME = "questionArchives";
 const ARCHIVE_SERVER_ENDPOINT = "/api/archive";
+const SUPABASE_URL = "https://oqnaysdfslyhgponmuse.supabase.co";
+const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im9xbmF5c2Rmc2x5aGdwb25tdXNlIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODExNjU4MjAsImV4cCI6MjA5Njc0MTgyMH0.YXsMFMdGuuqHBvm89bzm8XHkOol7nxHwnxBK5op7YpU";
+const SUPABASE_ARCHIVE_TABLE = "archives";
+const SUPABASE_ARCHIVE_BUCKET = "archive-images";
 const DEFAULT_MODEL_ID = "gemini-3.1-flash-lite";
 const DEFAULT_ANSWER_LEVEL_KEY = "easy";
 
@@ -2397,7 +2401,7 @@ function createArchiveRecord({ bodyKey, mode, selection, answer, imageBase64, an
   const cleanedAnswer = cleanAiAnswer(answer || "");
 
   return {
-    id: `${formatArchiveTimestamp(createdAt)}-${Math.random().toString(36).slice(2, 8)}`,
+    id: createArchiveId(createdAt),
     userName,
     createdAt,
     updatedAt: createdAt,
@@ -2466,15 +2470,30 @@ function addFollowupMessagesToRecord(record, question, answer) {
 }
 
 async function saveArchiveRecord(record) {
-  const archiveRecord = {
+  let archiveRecord = {
     ...record,
     markdown: buildArchiveMarkdown(record),
   };
 
+  let supabaseSaved = false;
   let localSaved = false;
   let serverSaved = false;
+  let supabaseError = null;
   let localError = null;
   let serverError = null;
+
+  try {
+    const supabaseRecord = await saveSupabaseArchiveRecord(archiveRecord);
+    archiveRecord = {
+      ...archiveRecord,
+      ...supabaseRecord,
+      imageBase64: archiveRecord.imageBase64,
+      markdown: archiveRecord.markdown,
+    };
+    supabaseSaved = true;
+  } catch (error) {
+    supabaseError = error;
+  }
 
   try {
     await putLocalArchive(archiveRecord);
@@ -2489,8 +2508,8 @@ async function saveArchiveRecord(record) {
     serverError = error;
   }
 
-  if (!localSaved && !serverSaved) {
-    throw localError || serverError || new Error("저장소를 사용할 수 없어요.");
+  if (!supabaseSaved && !localSaved && !serverSaved) {
+    throw supabaseError || localError || serverError || new Error("저장소를 사용할 수 없어요.");
   }
 
   state.currentArchiveRecord = archiveRecord;
@@ -2619,21 +2638,26 @@ function appendArchiveSection(title, text) {
 }
 
 async function loadArchiveRecords() {
+  const supabaseResult = await fetchSupabaseArchiveList().catch(() => null);
   const serverResult = await fetchServerArchiveList().catch(() => null);
-  if (Array.isArray(serverResult)) {
-    return normalizeArchiveRecords(serverResult).sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0));
-  }
-
   const staticResult = await fetchStaticArchiveList().catch(() => null);
-  if (Array.isArray(staticResult)) {
-    return normalizeArchiveRecords(staticResult).sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0));
-  }
-
   const localResult = await getLocalArchives().catch(() => []);
-  return normalizeArchiveRecords(localResult).sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0));
+  const merged = new Map();
+
+  [localResult, staticResult, serverResult, supabaseResult].forEach((records) => {
+    if (!Array.isArray(records)) return;
+    normalizeArchiveRecords(records).forEach((record) => {
+      if (record.id) merged.set(record.id, record);
+    });
+  });
+
+  return Array.from(merged.values()).sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0));
 }
 
 async function getArchiveRecord(id) {
+  const supabaseRecord = await fetchSupabaseArchiveDetail(id).catch(() => null);
+  if (supabaseRecord) return normalizeArchiveRecord(supabaseRecord);
+
   const serverRecord = await fetchServerArchiveDetail(id).catch(() => null);
   if (serverRecord) return normalizeArchiveRecord(serverRecord);
 
@@ -2759,6 +2783,11 @@ function createArchiveBaseName(userName, createdAt) {
   return `${sanitizeFilePart(userName || "인천대원")}_${formatArchiveTimestamp(createdAt)}`;
 }
 
+function createArchiveId(createdAt) {
+  if (crypto?.randomUUID) return crypto.randomUUID();
+  return `${formatArchiveTimestamp(createdAt)}-${Math.random().toString(36).slice(2, 8)}`;
+}
+
 function sanitizeFilePart(value) {
   const cleaned = sanitizeUserName(value).replace(/[\\/:*?"<>|]/g, "").replace(/\s+/g, "_");
   return cleaned || "인천대원";
@@ -2779,6 +2808,182 @@ function getViewModeLabel(mode) {
   if (mode === "flat") return "평면지도";
   if (mode === "rover") return "로버 사진";
   return "지도";
+}
+
+function hasSupabaseConfig() {
+  return Boolean(SUPABASE_URL && SUPABASE_ANON_KEY);
+}
+
+function getSupabaseHeaders(extra = {}) {
+  return {
+    apikey: SUPABASE_ANON_KEY,
+    Authorization: `Bearer ${SUPABASE_ANON_KEY}`,
+    ...extra,
+  };
+}
+
+function getSupabaseRestUrl(pathAndQuery = "") {
+  return `${SUPABASE_URL}/rest/v1/${pathAndQuery}`;
+}
+
+function getSupabaseStorageObjectUrl(path) {
+  return `${SUPABASE_URL}/storage/v1/object/${SUPABASE_ARCHIVE_BUCKET}/${encodeStoragePath(path)}`;
+}
+
+function getSupabasePublicImageUrl(path) {
+  return `${SUPABASE_URL}/storage/v1/object/public/${SUPABASE_ARCHIVE_BUCKET}/${encodeStoragePath(path)}`;
+}
+
+function encodeStoragePath(path) {
+  return String(path || "")
+    .split("/")
+    .map((part) => encodeURIComponent(part))
+    .join("/");
+}
+
+async function saveSupabaseArchiveRecord(record) {
+  if (!hasSupabaseConfig()) throw new Error("Supabase 설정이 없어요.");
+
+  const imagePath = record.imagePath || record.imageName || `${record.id}.jpg`;
+  if (record.imageBase64) {
+    await uploadSupabaseArchiveImage(imagePath, record.imageBase64);
+  }
+
+  const row = archiveRecordToSupabaseRow({
+    ...record,
+    imagePath,
+  });
+
+  const response = await fetch(`${getSupabaseRestUrl(SUPABASE_ARCHIVE_TABLE)}?on_conflict=id`, {
+    method: "POST",
+    headers: getSupabaseHeaders({
+      "Content-Type": "application/json",
+      Prefer: "resolution=merge-duplicates,return=representation",
+    }),
+    body: JSON.stringify(row),
+  });
+
+  if (!response.ok) {
+    throw new Error(await getReadableHttpError(response, "Supabase 아카이브 저장에 실패했어요."));
+  }
+
+  const data = await response.json().catch(() => []);
+  return normalizeArchiveRecord(supabaseRowToArchiveRecord(Array.isArray(data) ? data[0] || row : data || row));
+}
+
+async function uploadSupabaseArchiveImage(path, imageBase64) {
+  const response = await fetch(getSupabaseStorageObjectUrl(path), {
+    method: "POST",
+    headers: getSupabaseHeaders({
+      "Content-Type": "image/jpeg",
+      "x-upsert": "true",
+    }),
+    body: base64ToBlob(imageBase64, "image/jpeg"),
+  });
+
+  if (!response.ok) {
+    throw new Error(await getReadableHttpError(response, "Supabase 이미지 저장에 실패했어요."));
+  }
+}
+
+async function fetchSupabaseArchiveList() {
+  if (!hasSupabaseConfig()) return null;
+  const response = await fetch(
+    getSupabaseRestUrl(`${SUPABASE_ARCHIVE_TABLE}?select=*&order=created_at.desc`),
+    {
+      headers: getSupabaseHeaders(),
+      cache: "no-store",
+    },
+  );
+
+  if (!response.ok) {
+    throw new Error(await getReadableHttpError(response, "Supabase 아카이브 목록을 불러오지 못했어요."));
+  }
+
+  const rows = await response.json();
+  return Array.isArray(rows) ? rows.map(supabaseRowToArchiveRecord) : [];
+}
+
+async function fetchSupabaseArchiveDetail(id) {
+  if (!hasSupabaseConfig()) return null;
+  const response = await fetch(
+    getSupabaseRestUrl(`${SUPABASE_ARCHIVE_TABLE}?id=eq.${encodeURIComponent(id)}&select=*&limit=1`),
+    {
+      headers: getSupabaseHeaders(),
+      cache: "no-store",
+    },
+  );
+
+  if (!response.ok) return null;
+
+  const rows = await response.json();
+  return Array.isArray(rows) && rows[0] ? supabaseRowToArchiveRecord(rows[0]) : null;
+}
+
+function archiveRecordToSupabaseRow(record) {
+  return {
+    id: record.id,
+    user_name: record.userName || "인천대원",
+    title: record.title || "저장된 질문",
+    body_key: record.bodyKey || "",
+    body_name: record.bodyName || "",
+    mode: record.mode || "",
+    mode_label: record.modeLabel || getViewModeLabel(record.mode),
+    details: record.details || "",
+    answer_level_key: record.answerLevelKey || "",
+    image_path: record.imagePath || record.imageName || "",
+    messages: getArchiveMessages(record),
+    created_at: new Date(record.createdAt || Date.now()).toISOString(),
+    updated_at: new Date(record.updatedAt || Date.now()).toISOString(),
+  };
+}
+
+function supabaseRowToArchiveRecord(row) {
+  const imagePath = row.image_path || "";
+  const createdAt = row.created_at ? new Date(row.created_at).getTime() : Date.now();
+  const updatedAt = row.updated_at ? new Date(row.updated_at).getTime() : createdAt;
+  return {
+    id: row.id,
+    userName: row.user_name || "인천대원",
+    createdAt,
+    updatedAt,
+    bodyKey: row.body_key || "",
+    bodyName: row.body_name || "",
+    mode: row.mode || "",
+    modeLabel: row.mode_label || getViewModeLabel(row.mode),
+    title: row.title || "저장된 질문",
+    details: row.details || "",
+    answerLevelKey: row.answer_level_key || "",
+    imagePath,
+    imageName: imagePath.split("/").pop() || "",
+    imageUrl: imagePath ? getSupabasePublicImageUrl(imagePath) : "",
+    messages: Array.isArray(row.messages) ? row.messages : [],
+  };
+}
+
+function base64ToBlob(base64, mimeType) {
+  const byteCharacters = atob(String(base64 || "").replace(/^data:[^,]+,/, ""));
+  const byteArrays = [];
+  for (let offset = 0; offset < byteCharacters.length; offset += 1024) {
+    const slice = byteCharacters.slice(offset, offset + 1024);
+    const byteNumbers = new Array(slice.length);
+    for (let index = 0; index < slice.length; index += 1) {
+      byteNumbers[index] = slice.charCodeAt(index);
+    }
+    byteArrays.push(new Uint8Array(byteNumbers));
+  }
+  return new Blob(byteArrays, { type: mimeType });
+}
+
+async function getReadableHttpError(response, fallback) {
+  const text = await response.text().catch(() => "");
+  if (!text) return fallback;
+  try {
+    const data = JSON.parse(text);
+    return data.message || data.error || fallback;
+  } catch {
+    return text.slice(0, 240) || fallback;
+  }
 }
 
 function openArchiveDb() {
