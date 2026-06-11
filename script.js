@@ -12,6 +12,8 @@ const SUPABASE_ARCHIVE_BUCKET = "archive-images";
 const DEFAULT_MODEL_ID = "gemini-3.1-flash-lite";
 const DEFAULT_ANSWER_LEVEL_KEY = "easy";
 const ALLOWED_LOCAL_CACHE_KEYS = new Set([PLAN_KEY]);
+const APP_HISTORY_KEY = "moonMarsAstroAI";
+const APP_MODAL_IDS = ["answerModal", "historyModal", "planModal", "settingsModal", "nameModal"];
 
 const MODEL_ID_ALIASES = {
   "gemini-2.5-flash-lite": "gemini-3.1-flash-lite",
@@ -62,7 +64,7 @@ const ANSWER_LEVELS = [
     summary: "초등학교 고학년 수준",
     description: "기본 과학 용어와 지형 크기, 탐사 맥락을 함께 설명해요.",
     instruction: "답변 난이도는 중간입니다. 초등학교 고학년 학생이 읽는다고 생각하고, 기본 과학 용어를 사용하되 바로 쉬운 뜻을 덧붙이세요. 관찰 근거와 원인을 차근차근 연결하세요.",
-    responseDetail: "관찰 근거는 2~3가지로 설명하고, 색, 밝기, 높낮이, 모양 같은 단서를 과학 개념과 연결해 주세요. 이름 있는 크레이터(충돌구), 달의 바다, 충돌분지, 협곡, 화산, 평원이라면 알려진 대략적인 크기(직경/폭/길이/높이 중 알맞은 것)를 km 단위로 1가지 포함하세요. 실제 착륙지, 과거 착륙 후보지, 탐사선의 주요 탐사 대상과 관련이 널리 알려진 경우만 짧게 언급하고, 확실하지 않으면 '확인되는 대표 착륙 후보 기록은 찾기 어려워요'처럼 말하세요.",
+    responseDetail: "관찰 근거는 2~3가지로 설명하고, 색, 밝기, 높낮이, 모양 같은 단서를 과학 개념과 연결해 주세요. 이름 있는 크레이터(충돌구), 달의 바다, 충돌분지, 협곡, 화산, 평원이라면 알려진 대략적인 크기(직경/폭/길이/높이 중 알맞은 것)를 km 단위로 1가지 포함하세요. 실제 착륙지, 과거 착륙 후보지, 탐사선의 주요 탐사 대상과 관련이 널리 알려진 경우만 짧게 언급하고, 확실하지 않으면 말하지 마세요.",
     followupDetail: "과학적 근거와 관찰 포인트를 1~2가지 더해 주세요. 이름 있는 지형이라면 대략적인 크기나 탐사선 관련 정보를 확실한 범위에서 1가지 덧붙이세요.",
     audience: "초등학교 고학년 학생",
   },
@@ -73,8 +75,8 @@ const ANSWER_LEVELS = [
     summary: "중학교 1~2학년 수준",
     description: "지질학 개념, 지형 크기, 탐사 기록까지 더 풍부하게 설명해요.",
     instruction: "답변 난이도는 어려움입니다. 중학교 1~2학년 학생이 읽는다고 생각하고, 다른 단계보다 과학적 내용의 밀도를 높이세요. 충돌 에너지, 분출물, 알베도, 광물·암석 조성, 화산 활동, 침식, 퇴적, 고도 차이, 상대적으로 오래된 지형과 젊은 지형의 차이 같은 개념을 표시 영역에 맞게 골라 자세히 연결하세요. 단, 처음 나오는 전문 용어는 괄호 안에서 쉽게 풀어 주세요.",
-    responseDetail: "관찰 근거는 3~4가지로 충분히 제시하고, 각 근거가 어떤 지질학적 해석으로 이어지는지 설명하세요. 가능한 경우 색·밝기·고도·테두리 모양·분화구 겹침·층리·용암 평원·퇴적 흔적 같은 과학 단서를 함께 다루세요. 이름 있는 크레이터(충돌구), 달의 바다, 충돌분지, 협곡, 화산, 평원이라면 알려진 대략적인 크기(직경/폭/길이/높이 중 알맞은 것)를 km 단위로 포함하고, 그 크기가 왜 과학적으로 중요한지도 연결하세요. 실제 착륙지, 과거 착륙 후보지, 착륙 후보권역, 탐사선의 주요 탐사 대상과 관련이 널리 알려진 경우에는 탐사선 이름까지 언급하세요. 확실하지 않은 부분은 왜 불확실한지도 짚고, 착륙 후보지 여부를 모르면 절대 지어내지 말고 '확인되는 대표 착륙 후보 기록은 찾기 어렵습니다'라고 말하세요.",
-    followupDetail: "과학적 근거와 관찰 포인트를 2~3가지 더하고, 관련 지질학 개념을 한두 개 더 연결해 주세요. 이름 있는 지형이라면 대략적인 크기와 탐사선 착륙지·후보지·탐사 대상 여부를 확실한 범위에서 덧붙이세요.",
+    responseDetail: "관찰 근거는 3~4가지로 충분히 제시하고, 각 근거가 어떤 지질학적 해석으로 이어지는지 설명하세요. 가능한 경우 색·밝기·고도·테두리 모양·분화구 겹침·층리·용암 평원·퇴적 흔적 같은 과학 단서를 함께 다루세요. 이름 있는 크레이터(충돌구), 달의 바다, 충돌분지, 협곡, 화산, 평원이라면 알려진 대략적인 크기(직경/폭/길이/높이 중 알맞은 것)를 km 단위로 포함하고, 그 크기가 왜 과학적으로 중요한지도 연결하세요. 실제 착륙지, 과거 착륙 후보지, 착륙 후보권역, 탐사선의 주요 탐사 대상과 관련이 널리 알려진 경우에는 탐사선 이름까지 언급하세요. 확실하지 않은 부분은 왜 불확실한지도 짚고, 착륙 후보지 여부를 모르면 절대 말하지 마세요.",
+    followupDetail: "화학과 물리 지구과학등 관련된 조금 어려운 과학적 근거와 관찰 포인트를 2~3가지 더하고, 관련 지질학 개념을 한두 개 더 연결해 주세요. 이름 있는 지형이라면 대략적인 크기와 탐사선 착륙지·후보지·탐사 대상 여부를 확실한 범위에서 덧붙이세요.",
     audience: "중학교 1~2학년 학생",
   },
 ];
@@ -89,7 +91,7 @@ const LOADING_MESSAGES = [
 ];
 
 const GEMMA_LOADING_MESSAGES = [
-  "Gemma가 화성에서 길을 잃었습니다... 하지만 좌표는 기억하고 있어요.",
+  "화성에서 길을 잃었습니다... 하지만 좌표는 기억하고 있어요.",
   "달 표면에서 반짝이는 단서를 주워 모으는 중입니다.",
   "지형 후보들을 줄 세워 놓고 하나씩 비교하는 중입니다.",
   "단정하면 안 되는 말은 우주 상자에 잠시 넣어 두는 중입니다.",
@@ -573,6 +575,9 @@ const state = {
   currentArchiveRecord: null,
   archiveRecords: [],
   archiveSearchQuery: "",
+  archiveDetailId: null,
+  applyingHistory: false,
+  currentHistoryState: null,
 };
 
 function getInitialModelId() {
@@ -625,7 +630,7 @@ function init() {
     button.addEventListener("click", () => selectBody(button.dataset.body));
   });
 
-  els.backBtn.addEventListener("click", showSelection);
+  els.backBtn.addEventListener("click", () => requestAppBack(() => showSelection({ updateHistory: false })));
   els.sphereBtn.addEventListener("click", () => setViewMode("sphere"));
   els.flatBtn.addEventListener("click", () => setViewMode("flat"));
   els.roverBtn?.addEventListener("click", () => setViewMode("rover"));
@@ -639,8 +644,8 @@ function init() {
   els.homeSettingsBtn.addEventListener("click", openSettings);
   els.historyBtn?.addEventListener("click", openHistory);
   els.homeArchiveBtn.addEventListener("click", openArchiveScreen);
-  els.archiveBackBtn.addEventListener("click", showSelection);
-  els.archiveDetailBackBtn.addEventListener("click", showArchiveListPage);
+  els.archiveBackBtn.addEventListener("click", () => requestAppBack(() => showSelection({ updateHistory: false })));
+  els.archiveDetailBackBtn.addEventListener("click", () => requestAppBack(() => showArchiveListPage({ updateHistory: false })));
   els.archiveSearchInput?.addEventListener("input", () => {
     state.archiveSearchQuery = els.archiveSearchInput.value;
     renderArchiveList();
@@ -701,9 +706,10 @@ function init() {
   window.addEventListener("resize", resizeCanvases);
   window.addEventListener("keydown", (event) => {
     if (event.key === "Escape") {
-      closeAllModals();
+      closeTopModalOrBack();
     }
   });
+  window.addEventListener("popstate", onAppPopState);
 
   buildRoverTray();
   renderAnswerLevelOptions();
@@ -711,10 +717,11 @@ function init() {
   hydratePlan();
   hydrateUserNameSettings();
   resizeCanvases();
+  initializeAppHistory();
   ensureUserName();
 }
 
-async function selectBody(bodyKey) {
+async function selectBody(bodyKey, options = {}) {
   const body = bodies[bodyKey];
   if (!body) return;
 
@@ -722,6 +729,7 @@ async function selectBody(bodyKey) {
   state.rotation.lon = 0;
   state.rotation.lat = 0;
   state.sphereZoom = 1;
+  state.viewMode = "sphere";
   resetZoom(false);
   state.roverIndex = 0;
   state.strokes = [];
@@ -737,6 +745,7 @@ async function selectBody(bodyKey) {
   els.mapImage.alt = `${body.name} 전체 지도`;
   els.roverBtn?.classList.toggle("hidden", bodyKey !== "mars");
   els.elevationControl?.classList.toggle("hidden", bodyKey !== "moon");
+  pushAppHistoryState({ screen: "explore", bodyKey: state.bodyKey, viewMode: state.viewMode }, options);
 
   if (body.elevation) {
     els.elevationImage.src = body.elevation;
@@ -760,14 +769,17 @@ async function selectBody(bodyKey) {
   }
 }
 
-function showSelection() {
+function showSelection(options = {}) {
   state.bodyKey = null;
   state.strokes = [];
   state.lastAnalysis = null;
+  state.archiveDetailId = null;
+  closeAllModals({ updateHistory: false });
   els.exploreScreen.classList.add("hidden");
   els.archiveScreen.classList.add("hidden");
   els.selectionScreen.classList.remove("hidden");
   renderDrawing();
+  pushAppHistoryState({ screen: "selection" }, options);
 }
 
 function setViewMode(mode, options = {}) {
@@ -1752,7 +1764,7 @@ function buildMarsReferencePrompt(likely, nearby) {
     "맞지 않으면 지형명 대신 '정확한 지명은 단정하기 어렵다'고 말하고, 보이는 지형 유형만 설명하세요.",
     "공식 지형명 후보가 맞으면 공식 영문명, 쉬운 한글 표기, 이름이 붙은 이유(고전 알베도 지형명인지, 인물/지명/탐사 임무를 기린 이름인지)를 짧게 풀어 설명하세요.",
     "중간 또는 어려움 단계라면 공식 지형명 후보의 대략적 크기(직경/폭/길이/높이 중 알맞은 것)와 실제 착륙지·과거 착륙 후보지·탐사선 주요 탐사 대상 여부를 확실한 범위에서 함께 설명하세요.",
-    "착륙 후보지나 탐사선 관련 여부가 확실하지 않으면 추측하지 말고, 확인되는 대표 기록은 찾기 어렵다고 말하세요.",
+    "착륙 후보지나 탐사선 관련 여부가 확실하지 않으면 말하지 말고, 확인되는 대표 기록만 말하세요.",
     "가까운 후보가 여러 개라면 가장 가까운 1개를 중심으로 말하고, 모양이 애매하면 '후보'라고 분명히 표현하세요.",
     `가까운 후보: ${likelyLines.join(" / ")}`,
     `주변 참고 지형: ${nearbyLines.join(" / ")}`,
@@ -1806,10 +1818,10 @@ function buildMoonReferencePrompt(likely, nearby) {
     "표시점과 후보 중심의 거리, 후보별 매칭 반경, 실제 모양이 모두 맞을 때만 '~ 부근으로 추정'이라고 말하세요.",
     "맞지 않으면 지형명 대신 '정확한 지명은 단정하기 어렵다'고 말하고, 보이는 지형 유형만 설명하세요.",
     "명명 크레이터가 맞는 후보라면 공식 영문명, 쉬운 한글 표기, 이름이 붙은 이유(누구/무엇을 기린 이름인지)를 어린이에게 짧게 풀어 설명하세요.",
-    "중간 또는 어려움 단계라면 공식 지형명 후보의 대략적 크기(직경/폭/길이/높이 중 알맞은 것)와 실제 착륙지·과거 착륙 후보지·탐사선 주요 탐사 대상 여부를 확실한 범위에서 함께 설명하세요.",
-    "착륙 후보지나 탐사선 관련 여부가 확실하지 않으면 추측하지 말고, 확인되는 대표 기록은 찾기 어렵다고 말하세요.",
+    "중간 또는 어려움 단계라면 공식 지형명 후보의 대략적 크기(직경/폭/길이/높이)와 과학적 지식 실제 착륙지·과거 착륙 후보지·탐사선 주요 탐사 대상 여부를 확실한 범위에서 함께 설명하세요.",
+    "착륙 후보지나 탐사선 관련 여부가 확실하지 않으면 말하지 말고, 확실한 기록이 있는것만 말해주세요.",
     "가까운 후보가 여러 개라면 가장 가까운 1개를 중심으로 말하고, 모양이 애매하면 '후보'라고 분명히 표현하세요.",
-    "달의 '바다'는 액체 물의 바다가 아니라 오래전에 용암이 굳어 만들어진 어두운 현무암 평원이라고 어린이에게 쉽게 설명하세요.",
+    "달의 '바다'는 액체 물의 바다가 아니라 오래전에 용암이 굳어 만들어진 어두운 현무암 평원이라는 내용을 포함해서 어린이에게 쉽게 설명하세요.",
     `가까운 후보: ${likelyLines.join(" / ")}`,
     `주변 참고 지형: ${nearbyLines.join(" / ")}`,
   ].join("\n");
@@ -2389,7 +2401,7 @@ function renderHistory() {
       resetAnswerScroll();
       appendAnswerCard(item.question, item.details || "");
       appendAnswerCard("저장된 답변", cleanedAnswer);
-      closeModal("historyModal");
+      closeModal("historyModal", { updateHistory: false });
       openModal("answerModal");
       resetAnswerScroll();
     });
@@ -2543,12 +2555,13 @@ function upsertArchiveRecordInMemory(record) {
   state.archiveRecords.sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0));
 }
 
-async function openArchiveScreen() {
-  closeAllModals();
+async function openArchiveScreen(options = {}) {
+  closeAllModals({ updateHistory: false });
   els.selectionScreen.classList.add("hidden");
   els.exploreScreen.classList.add("hidden");
   els.archiveScreen.classList.remove("hidden");
-  showArchiveListPage();
+  showArchiveListPage({ updateHistory: false });
+  pushAppHistoryState({ screen: "archive-list" }, options);
 
   els.archiveList.innerHTML = "";
   const loading = document.createElement("p");
@@ -2571,15 +2584,17 @@ async function openArchiveScreen() {
   }
 }
 
-function showArchiveListPage() {
+function showArchiveListPage(options = {}) {
   els.archiveListPage.classList.remove("hidden");
   els.archiveDetailPage.classList.add("hidden");
   els.archiveFollowupInput.value = "";
   state.currentArchiveRecord = null;
+  state.archiveDetailId = null;
   if (els.archiveSearchInput) {
     els.archiveSearchInput.value = state.archiveSearchQuery;
   }
   renderArchiveList();
+  pushAppHistoryState({ screen: "archive-list" }, options);
 }
 
 function renderArchiveList(records = state.archiveRecords) {
@@ -2647,15 +2662,18 @@ function normalizeArchiveSearchText(value) {
     .replace(/\s+/g, "");
 }
 
-async function openArchiveDetail(id) {
+async function openArchiveDetail(id, options = {}) {
+  state.archiveDetailId = id;
   els.archiveDetailBody.innerHTML = "";
   els.archiveDetailMeta.textContent = "불러오는 중...";
   els.archiveDetailTitle.textContent = "";
   els.archiveListPage.classList.add("hidden");
   els.archiveDetailPage.classList.remove("hidden");
+  pushAppHistoryState({ screen: "archive-detail", archiveId: id }, options);
 
   try {
     const record = await getArchiveRecord(id);
+    state.archiveDetailId = record.id;
     renderArchiveDetail(record);
   } catch (error) {
     els.archiveDetailMeta.textContent = "";
@@ -2666,6 +2684,7 @@ async function openArchiveDetail(id) {
 
 function renderArchiveDetail(record) {
   state.currentArchiveRecord = record;
+  state.archiveDetailId = record.id || state.archiveDetailId;
   const userName = record.userName || "인천대원";
   els.archiveDetailMeta.textContent = `${userName} 대원 · ${formatFullDate(record.createdAt)}`;
   els.archiveDetailTitle.textContent = record.title || "저장된 질문";
@@ -3131,7 +3150,7 @@ function openPlan() {
 
 function ensureUserName() {
   if (state.userName) return;
-  els.nameModal.classList.remove("hidden");
+  openModal("nameModal");
   requestAnimationFrame(() => els.nameInput.focus());
 }
 
@@ -3517,17 +3536,172 @@ function showToast(message) {
   }, 2600);
 }
 
-function openModal(id) {
-  closeAllModals();
-  $(`#${id}`).classList.remove("hidden");
+function openModal(id, options = {}) {
+  closeAllModals({ updateHistory: false });
+  showModalElement(id);
+  pushAppHistoryState({ ...getCurrentScreenHistoryState(), modalId: id }, options);
 }
 
-function closeModal(id) {
-  $(`#${id}`)?.classList.add("hidden");
+function closeModal(id, options = {}) {
+  if (options.updateHistory !== false && isCurrentHistoryModal(id)) {
+    window.history.back();
+    return;
+  }
+  hideModalElement(id);
 }
 
 function closeAllModals() {
-  [els.answerModal, els.historyModal, els.planModal, els.settingsModal].forEach((modal) => modal.classList.add("hidden"));
+  APP_MODAL_IDS.forEach(hideModalElement);
+}
+
+function showModalElement(id) {
+  document.getElementById(id)?.classList.remove("hidden");
+}
+
+function hideModalElement(id) {
+  document.getElementById(id)?.classList.add("hidden");
+}
+
+function getOpenModalId() {
+  return APP_MODAL_IDS.find((id) => !document.getElementById(id)?.classList.contains("hidden")) || "";
+}
+
+function closeTopModalOrBack() {
+  const modalId = getOpenModalId();
+  if (modalId) {
+    closeModal(modalId);
+  }
+}
+
+function initializeAppHistory() {
+  replaceAppHistoryState({ screen: "selection" });
+}
+
+function requestAppBack(fallback) {
+  const current = window.history.state;
+  if (current?.app === APP_HISTORY_KEY && (current.modalId || current.screen !== "selection")) {
+    window.history.back();
+    return;
+  }
+  fallback?.();
+}
+
+function isCurrentHistoryModal(id) {
+  return window.history.state?.app === APP_HISTORY_KEY && window.history.state.modalId === id;
+}
+
+function getCurrentScreenHistoryState() {
+  if (!els.archiveScreen.classList.contains("hidden")) {
+    if (!els.archiveDetailPage.classList.contains("hidden")) {
+      return {
+        screen: "archive-detail",
+        archiveId: state.archiveDetailId || state.currentArchiveRecord?.id || "",
+      };
+    }
+    return { screen: "archive-list" };
+  }
+
+  if (!els.exploreScreen.classList.contains("hidden") && state.bodyKey) {
+    return {
+      screen: "explore",
+      bodyKey: state.bodyKey,
+      viewMode: state.viewMode,
+    };
+  }
+
+  return { screen: "selection" };
+}
+
+function createAppHistoryState(overrides = {}) {
+  return {
+    app: APP_HISTORY_KEY,
+    ...getCurrentScreenHistoryState(),
+    ...overrides,
+  };
+}
+
+function replaceAppHistoryState(overrides = {}) {
+  const nextState = createAppHistoryState(overrides);
+  window.history.replaceState(nextState, "", window.location.href);
+  state.currentHistoryState = nextState;
+}
+
+function pushAppHistoryState(overrides = {}, options = {}) {
+  if (state.applyingHistory || options.updateHistory === false) return;
+  const nextState = createAppHistoryState(overrides);
+  if (areAppHistoryStatesEqual(window.history.state, nextState)) {
+    state.currentHistoryState = nextState;
+    return;
+  }
+  window.history.pushState(nextState, "", window.location.href);
+  state.currentHistoryState = nextState;
+}
+
+function areAppHistoryStatesEqual(a, b) {
+  return Boolean(
+    a?.app === APP_HISTORY_KEY
+      && b?.app === APP_HISTORY_KEY
+      && a.screen === b.screen
+      && (a.bodyKey || "") === (b.bodyKey || "")
+      && (a.viewMode || "") === (b.viewMode || "")
+      && (a.archiveId || "") === (b.archiveId || "")
+      && (a.modalId || "") === (b.modalId || ""),
+  );
+}
+
+async function onAppPopState(event) {
+  const route = event.state?.app === APP_HISTORY_KEY
+    ? event.state
+    : { app: APP_HISTORY_KEY, screen: "selection" };
+
+  state.applyingHistory = true;
+  try {
+    closeAllModals({ updateHistory: false });
+    await applyAppHistoryRoute(route);
+    if (route.modalId) {
+      showModalElement(route.modalId);
+      if (route.modalId === "nameModal") {
+        requestAnimationFrame(() => els.nameInput.focus());
+      }
+    }
+    state.currentHistoryState = route;
+  } finally {
+    state.applyingHistory = false;
+  }
+}
+
+async function applyAppHistoryRoute(route) {
+  if (route.screen === "explore" && route.bodyKey) {
+    await showExploreFromHistory(route);
+    return;
+  }
+
+  if (route.screen === "archive-list") {
+    await openArchiveScreen({ updateHistory: false });
+    return;
+  }
+
+  if (route.screen === "archive-detail" && route.archiveId) {
+    await openArchiveScreen({ updateHistory: false });
+    await openArchiveDetail(route.archiveId, { updateHistory: false });
+    return;
+  }
+
+  showSelection({ updateHistory: false });
+}
+
+async function showExploreFromHistory(route) {
+  if (state.bodyKey !== route.bodyKey || els.exploreScreen.classList.contains("hidden")) {
+    await selectBody(route.bodyKey, { updateHistory: false });
+  } else {
+    els.selectionScreen.classList.add("hidden");
+    els.archiveScreen.classList.add("hidden");
+    els.exploreScreen.classList.remove("hidden");
+  }
+
+  if (route.viewMode) {
+    setViewMode(route.viewMode, { keepDrawing: true });
+  }
 }
 
 function loadJson(key, fallback) {
