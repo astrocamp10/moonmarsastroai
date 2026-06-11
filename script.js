@@ -3,20 +3,15 @@
 const urlParams = new URLSearchParams(window.location.search);
 const apiKey = urlParams.get("key") || "";
 
-const HISTORY_KEY = "moonMarsAstroAI.history.v1";
 const PLAN_KEY = "moonMarsAstroAI.plan.v1";
-const MODEL_KEY = "moonMarsAstroAI.model.v1";
-const ANSWER_LEVEL_KEY = "moonMarsAstroAI.answerLevel.v1";
-const USER_NAME_KEY = "moonMarsAstroAI.userName.v1";
 const ARCHIVE_DB_NAME = "moonMarsAstroAI.archiveDB.v1";
-const ARCHIVE_STORE_NAME = "questionArchives";
-const ARCHIVE_SERVER_ENDPOINT = "/api/archive";
 const SUPABASE_URL = "https://oqnaysdfslyhgponmuse.supabase.co";
 const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im9xbmF5c2Rmc2x5aGdwb25tdXNlIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODExNjU4MjAsImV4cCI6MjA5Njc0MTgyMH0.YXsMFMdGuuqHBvm89bzm8XHkOol7nxHwnxBK5op7YpU";
 const SUPABASE_ARCHIVE_TABLE = "archives";
 const SUPABASE_ARCHIVE_BUCKET = "archive-images";
 const DEFAULT_MODEL_ID = "gemini-3.1-flash-lite";
 const DEFAULT_ANSWER_LEVEL_KEY = "easy";
+const ALLOWED_LOCAL_CACHE_KEYS = new Set([PLAN_KEY]);
 
 const MODEL_ID_ALIASES = {
   "gemini-2.5-flash-lite": "gemini-3.1-flash-lite",
@@ -550,7 +545,7 @@ const state = {
   selectedModelId: getInitialModelId(),
   selectedAnswerLevelKey: getInitialAnswerLevelKey(),
   userName: getStoredUserName(),
-  history: loadJson(HISTORY_KEY, []),
+  history: [],
   plan: loadJson(PLAN_KEY, {
     goal: "",
     steps: "",
@@ -572,8 +567,7 @@ function getInitialModelId() {
   const urlModel = (urlParams.get("model") || "").split(",")[0]?.trim();
   if (urlModel) return normalizeModelId(urlModel);
 
-  const savedModel = loadJson(MODEL_KEY, DEFAULT_MODEL_ID);
-  return typeof savedModel === "string" && savedModel.trim() ? normalizeModelId(savedModel.trim()) : DEFAULT_MODEL_ID;
+  return DEFAULT_MODEL_ID;
 }
 
 function normalizeModelId(modelId) {
@@ -584,8 +578,7 @@ function getInitialAnswerLevelKey() {
   const urlLevel = (urlParams.get("level") || urlParams.get("answerLevel") || "").trim();
   if (urlLevel) return normalizeAnswerLevelKey(urlLevel);
 
-  const savedLevel = loadJson(ANSWER_LEVEL_KEY, DEFAULT_ANSWER_LEVEL_KEY);
-  return normalizeAnswerLevelKey(savedLevel);
+  return DEFAULT_ANSWER_LEVEL_KEY;
 }
 
 function normalizeAnswerLevelKey(levelKey) {
@@ -609,6 +602,8 @@ function normalizeAnswerLevelKey(levelKey) {
 }
 
 function init() {
+  cleanupNonPlanBrowserStorage();
+
   if (!apiKey) {
     els.keyGate.classList.remove("hidden");
     els.app.setAttribute("aria-hidden", "true");
@@ -2384,12 +2379,10 @@ function saveHistory(item) {
     answer: cleanAiAnswer(item.answer || ""),
   };
   state.history = [cleanedItem, ...state.history].slice(0, 30);
-  saveJson(HISTORY_KEY, state.history);
 }
 
 function clearHistory() {
   state.history = [];
-  saveJson(HISTORY_KEY, state.history);
   renderHistory();
   showToast("탐사 기록을 비웠어요.");
 }
@@ -2479,11 +2472,7 @@ async function saveArchiveRecord(record) {
 
   let supabaseSaved = false;
   let supabaseWarning = null;
-  let localSaved = false;
-  let serverSaved = false;
   let supabaseError = null;
-  let localError = null;
-  let serverError = null;
 
   try {
     const supabaseRecord = await saveSupabaseArchiveRecord(archiveRecord);
@@ -2502,21 +2491,8 @@ async function saveArchiveRecord(record) {
     console.warn("Supabase archive save failed:", error);
   }
 
-  try {
-    await putLocalArchive(archiveRecord);
-    localSaved = true;
-  } catch (error) {
-    localError = error;
-  }
-
-  try {
-    serverSaved = await postArchiveToServer(archiveRecord);
-  } catch (error) {
-    serverError = error;
-  }
-
-  if (!supabaseSaved && !localSaved && !serverSaved) {
-    throw supabaseError || localError || serverError || new Error("저장소를 사용할 수 없어요.");
+  if (!supabaseSaved) {
+    throw supabaseError || new Error("저장소를 사용할 수 없어요.");
   }
 
   if (!supabaseSaved && supabaseError) {
@@ -2657,12 +2633,9 @@ async function loadArchiveRecords() {
     console.warn("Supabase archive list load failed:", error);
     return null;
   });
-  const serverResult = await fetchServerArchiveList().catch(() => null);
-  const staticResult = await fetchStaticArchiveList().catch(() => null);
-  const localResult = await getLocalArchives().catch(() => []);
   const merged = new Map();
 
-  [localResult, staticResult, serverResult, supabaseResult].forEach((records) => {
+  [supabaseResult].forEach((records) => {
     if (!Array.isArray(records)) return;
     normalizeArchiveRecords(records).forEach((record) => {
       if (record.id) merged.set(record.id, record);
@@ -2679,15 +2652,6 @@ async function loadArchiveRecords() {
 async function getArchiveRecord(id) {
   const supabaseRecord = await fetchSupabaseArchiveDetail(id).catch(() => null);
   if (supabaseRecord) return normalizeArchiveRecord(supabaseRecord);
-
-  const serverRecord = await fetchServerArchiveDetail(id).catch(() => null);
-  if (serverRecord) return normalizeArchiveRecord(serverRecord);
-
-  const staticRecord = await fetchStaticArchiveDetail(id).catch(() => null);
-  if (staticRecord) return normalizeArchiveRecord(staticRecord);
-
-  const localRecord = await getLocalArchive(id).catch(() => null);
-  if (localRecord) return normalizeArchiveRecord(localRecord);
 
   throw new Error("저장된 항목을 찾지 못했어요.");
 }
@@ -3056,106 +3020,6 @@ async function getReadableHttpError(response, fallback) {
   }
 }
 
-function openArchiveDb() {
-  return new Promise((resolve, reject) => {
-    if (!("indexedDB" in window)) {
-      reject(new Error("이 브라우저에서는 IndexedDB를 사용할 수 없어요."));
-      return;
-    }
-
-    const request = indexedDB.open(ARCHIVE_DB_NAME, 1);
-    request.onupgradeneeded = () => {
-      const db = request.result;
-      if (!db.objectStoreNames.contains(ARCHIVE_STORE_NAME)) {
-        const store = db.createObjectStore(ARCHIVE_STORE_NAME, { keyPath: "id" });
-        store.createIndex("createdAt", "createdAt");
-      }
-    };
-    request.onsuccess = () => resolve(request.result);
-    request.onerror = () => reject(request.error || new Error("아카이브 저장소를 열 수 없어요."));
-  });
-}
-
-async function withArchiveStore(mode, callback) {
-  const db = await openArchiveDb();
-  return new Promise((resolve, reject) => {
-    const tx = db.transaction(ARCHIVE_STORE_NAME, mode);
-    const store = tx.objectStore(ARCHIVE_STORE_NAME);
-    const request = callback(store);
-    request.onsuccess = () => resolve(request.result);
-    request.onerror = () => reject(request.error || new Error("아카이브 작업에 실패했어요."));
-    tx.oncomplete = () => db.close();
-    tx.onerror = () => {
-      db.close();
-      reject(tx.error || new Error("아카이브 저장소 오류가 발생했어요."));
-    };
-  });
-}
-
-function putLocalArchive(record) {
-  return withArchiveStore("readwrite", (store) => store.put(record));
-}
-
-function getLocalArchive(id) {
-  return withArchiveStore("readonly", (store) => store.get(id));
-}
-
-async function getLocalArchives() {
-  const records = await withArchiveStore("readonly", (store) => store.getAll());
-  return Array.isArray(records) ? records : [];
-}
-
-async function postArchiveToServer(record) {
-  if (window.location.protocol === "file:") return false;
-
-  const response = await fetch(ARCHIVE_SERVER_ENDPOINT, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify({
-      record,
-      markdown: record.markdown || buildArchiveMarkdown(record),
-      imageBase64: record.imageBase64 || "",
-    }),
-  });
-
-  return response.ok;
-}
-
-async function fetchServerArchiveList() {
-  if (window.location.protocol === "file:") return null;
-  const response = await fetch(ARCHIVE_SERVER_ENDPOINT, {
-    cache: "no-store",
-  });
-  if (!response.ok) throw new Error("아카이브 폴더 목록을 불러오지 못했어요.");
-  const data = await response.json();
-  return Array.isArray(data.records) ? data.records : [];
-}
-
-async function fetchServerArchiveDetail(id) {
-  if (window.location.protocol === "file:") return null;
-  const response = await fetch(`${ARCHIVE_SERVER_ENDPOINT}/${encodeURIComponent(id)}`, {
-    cache: "no-store",
-  });
-  if (!response.ok) return null;
-  return response.json();
-}
-
-async function fetchStaticArchiveList() {
-  const response = await fetch(resolveArchiveAssetUrl("archives/index.json"), {
-    cache: "no-store",
-  });
-  if (!response.ok) throw new Error("정적 아카이브 목록을 불러오지 못했어요.");
-  const data = await response.json();
-  return Array.isArray(data.records) ? data.records : [];
-}
-
-async function fetchStaticArchiveDetail(id) {
-  const records = await fetchStaticArchiveList();
-  return records.find((record) => record.id === id) || null;
-}
-
 function normalizeArchiveRecords(records) {
   return records.map(normalizeArchiveRecord);
 }
@@ -3221,7 +3085,6 @@ function submitSettingsName(event) {
 
 function saveUserName(name) {
   state.userName = sanitizeUserName(name);
-  saveJson(USER_NAME_KEY, state.userName);
   hydrateUserNameSettings();
 }
 
@@ -3234,7 +3097,7 @@ function hydrateUserNameSettings() {
 }
 
 function getStoredUserName() {
-  return sanitizeUserName(loadJson(USER_NAME_KEY, ""));
+  return "";
 }
 
 function sanitizeUserName(value) {
@@ -3329,7 +3192,6 @@ function renderAnswerLevelOptions() {
 
 function setSelectedAnswerLevel(levelKey) {
   state.selectedAnswerLevelKey = normalizeAnswerLevelKey(levelKey);
-  saveJson(ANSWER_LEVEL_KEY, state.selectedAnswerLevelKey);
   renderAnswerLevelOptions();
   const activeLevel = getActiveAnswerLevel();
   showToast(`답변 단계를 ${activeLevel.label}으로 바꿨어요.`);
@@ -3392,7 +3254,6 @@ function renderModelOptions() {
 
 function setSelectedModel(modelId) {
   state.selectedModelId = normalizeModelId(modelId.trim() || DEFAULT_MODEL_ID);
-  saveJson(MODEL_KEY, state.selectedModelId);
   renderModelOptions();
   showToast(`${getActiveModel().label}로 바꿨어요.`);
 }
@@ -3593,6 +3454,11 @@ function closeAllModals() {
 }
 
 function loadJson(key, fallback) {
+  if (!ALLOWED_LOCAL_CACHE_KEYS.has(key)) {
+    removeLocalCacheKey(key);
+    return fallback;
+  }
+
   try {
     const raw = localStorage.getItem(key);
     return raw ? JSON.parse(raw) : fallback;
@@ -3602,10 +3468,46 @@ function loadJson(key, fallback) {
 }
 
 function saveJson(key, value) {
+  if (!ALLOWED_LOCAL_CACHE_KEYS.has(key)) {
+    removeLocalCacheKey(key);
+    return;
+  }
+
   try {
     localStorage.setItem(key, JSON.stringify(value));
   } catch {
     showToast("브라우저 저장 공간을 사용할 수 없어요.");
+  }
+}
+
+function removeLocalCacheKey(key) {
+  try {
+    localStorage.removeItem(key);
+  } catch {
+    // Ignore storage access errors; the goal is to avoid persisting data.
+  }
+}
+
+function cleanupNonPlanBrowserStorage() {
+  try {
+    const keys = [];
+    for (let index = 0; index < localStorage.length; index += 1) {
+      const key = localStorage.key(index);
+      if (key?.startsWith("moonMarsAstroAI.") && !ALLOWED_LOCAL_CACHE_KEYS.has(key)) {
+        keys.push(key);
+      }
+    }
+    keys.forEach((key) => localStorage.removeItem(key));
+  } catch {
+    // Ignore storage access errors; the app can still run without local cache.
+  }
+
+  if ("indexedDB" in window) {
+    try {
+      indexedDB.deleteDatabase(ARCHIVE_DB_NAME);
+    } catch {
+      // Ignore cleanup errors; future code no longer reads or writes this DB.
+    }
   }
 }
 
