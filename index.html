@@ -4,7 +4,7 @@
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>AI 우주탐사, 달과 화성</title>
-    <link rel="stylesheet" href="styles.css?v=20260611-archive-name-search">
+    <link rel="stylesheet" href="styles.css?v=20260611-archive-password">
   </head>
   <body>
     <div class="starfield" aria-hidden="true"></div>
@@ -258,6 +258,26 @@
       </div>
     </div>
 
+    <div id="archivePasswordModal" class="modal hidden" role="dialog" aria-modal="true" aria-labelledby="archivePasswordTitle">
+      <div class="modal-panel name-panel">
+        <div class="modal-head">
+          <div>
+            <p class="modal-eyebrow">관리자 확인</p>
+            <h2 id="archivePasswordTitle">아카이브 비밀번호</h2>
+          </div>
+          <button class="icon-button close-modal" type="button" data-close="archivePasswordModal" title="닫기">×</button>
+        </div>
+        <form id="archivePasswordForm" class="name-form">
+          <label>
+            <span>관리자 비밀번호</span>
+            <input id="archivePasswordInput" type="password" autocomplete="current-password" required>
+          </label>
+          <p id="archivePasswordError" class="archive-password-error" aria-live="polite"></p>
+          <button id="archivePasswordSubmit" class="primary-button" type="submit">아카이브 열기</button>
+        </form>
+      </div>
+    </div>
+
     <div id="nameModal" class="modal hidden" role="dialog" aria-modal="true" aria-labelledby="nameTitle">
       <div class="modal-panel name-panel">
         <div class="modal-head">
@@ -278,6 +298,6 @@
 
     <div id="toast" class="toast hidden" role="status" aria-live="polite"></div>
 
-    <script src="script.js?v=20260611-app-back-stack"></script>
+    <script src="script.js?v=20260611-archive-password"></script>
   </body>
 </html>

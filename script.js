@@ -11,9 +11,10 @@ const SUPABASE_ARCHIVE_TABLE = "archives";
 const SUPABASE_ARCHIVE_BUCKET = "archive-images";
 const DEFAULT_MODEL_ID = "gemini-3.1-flash-lite";
 const DEFAULT_ANSWER_LEVEL_KEY = "easy";
+const ARCHIVE_ADMIN_PASSWORD_HASH = "9258daf54c28871c2f56ab51a439039ca630f36aad5324b108df38b3e66c5fc0";
 const ALLOWED_LOCAL_CACHE_KEYS = new Set([PLAN_KEY]);
 const APP_HISTORY_KEY = "moonMarsAstroAI";
-const APP_MODAL_IDS = ["answerModal", "historyModal", "planModal", "settingsModal", "nameModal"];
+const APP_MODAL_IDS = ["answerModal", "historyModal", "planModal", "settingsModal", "archivePasswordModal", "nameModal"];
 
 const MODEL_ID_ALIASES = {
   "gemini-2.5-flash-lite": "gemini-3.1-flash-lite",
@@ -519,6 +520,11 @@ const els = {
   archiveFollowupForm: $("#archiveFollowupForm"),
   archiveFollowupInput: $("#archiveFollowupInput"),
   archiveFollowupBtn: $("#archiveFollowupBtn"),
+  archivePasswordModal: $("#archivePasswordModal"),
+  archivePasswordForm: $("#archivePasswordForm"),
+  archivePasswordInput: $("#archivePasswordInput"),
+  archivePasswordError: $("#archivePasswordError"),
+  archivePasswordSubmit: $("#archivePasswordSubmit"),
   toast: $("#toast"),
 };
 
@@ -576,6 +582,7 @@ const state = {
   archiveRecords: [],
   archiveSearchQuery: "",
   archiveDetailId: null,
+  archiveAccessGranted: false,
   applyingHistory: false,
   currentHistoryState: null,
 };
@@ -643,7 +650,7 @@ function init() {
   els.settingsBtn.addEventListener("click", openSettings);
   els.homeSettingsBtn.addEventListener("click", openSettings);
   els.historyBtn?.addEventListener("click", openHistory);
-  els.homeArchiveBtn.addEventListener("click", openArchiveScreen);
+  els.homeArchiveBtn.addEventListener("click", requestArchiveAccess);
   els.archiveBackBtn.addEventListener("click", () => requestAppBack(() => showSelection({ updateHistory: false })));
   els.archiveDetailBackBtn.addEventListener("click", () => requestAppBack(() => showArchiveListPage({ updateHistory: false })));
   els.archiveSearchInput?.addEventListener("input", () => {
@@ -678,6 +685,7 @@ function init() {
 
   els.followupForm.addEventListener("submit", submitFollowup);
   els.archiveFollowupForm.addEventListener("submit", submitArchiveFollowup);
+  els.archivePasswordForm.addEventListener("submit", submitArchivePassword);
   els.nameForm.addEventListener("submit", submitNameOnboarding);
   els.settingsNameForm.addEventListener("submit", submitSettingsName);
   els.customModelInput.addEventListener("change", () => {
@@ -691,7 +699,7 @@ function init() {
     button.addEventListener("click", () => closeModal(button.dataset.close));
   });
 
-  [els.answerModal, els.historyModal, els.planModal, els.settingsModal].forEach((modal) => {
+  [els.answerModal, els.historyModal, els.planModal, els.settingsModal, els.archivePasswordModal].forEach((modal) => {
     modal.addEventListener("click", (event) => {
       if (event.target === modal) {
         closeModal(modal.id);
@@ -2584,6 +2592,60 @@ async function openArchiveScreen(options = {}) {
   }
 }
 
+function requestArchiveAccess() {
+  if (state.archiveAccessGranted) {
+    openArchiveScreen();
+    return;
+  }
+
+  els.archivePasswordInput.value = "";
+  els.archivePasswordError.textContent = "";
+  openModal("archivePasswordModal");
+  requestAnimationFrame(() => els.archivePasswordInput.focus());
+}
+
+async function submitArchivePassword(event) {
+  event.preventDefault();
+  const password = els.archivePasswordInput.value;
+  if (!password) {
+    els.archivePasswordError.textContent = "비밀번호를 입력해 주세요.";
+    return;
+  }
+
+  els.archivePasswordSubmit.disabled = true;
+  els.archivePasswordError.textContent = "";
+
+  try {
+    const hash = await sha256Hex(password);
+    if (hash !== ARCHIVE_ADMIN_PASSWORD_HASH) {
+      els.archivePasswordInput.value = "";
+      els.archivePasswordError.textContent = "비밀번호가 맞지 않아요.";
+      els.archivePasswordInput.focus();
+      return;
+    }
+
+    state.archiveAccessGranted = true;
+    closeModal("archivePasswordModal", { updateHistory: false });
+    await openArchiveScreen();
+  } catch (error) {
+    els.archivePasswordError.textContent = "비밀번호 확인 중 문제가 생겼어요.";
+    console.warn("Archive password check failed:", error);
+  } finally {
+    els.archivePasswordSubmit.disabled = false;
+  }
+}
+
+async function sha256Hex(value) {
+  if (!globalThis.crypto?.subtle) {
+    throw new Error("Web Crypto API is not available.");
+  }
+  const bytes = new TextEncoder().encode(value);
+  const digest = await crypto.subtle.digest("SHA-256", bytes);
+  return Array.from(new Uint8Array(digest))
+    .map((byte) => byte.toString(16).padStart(2, "0"))
+    .join("");
+}
+
 function showArchiveListPage(options = {}) {
   els.archiveListPage.classList.remove("hidden");
   els.archiveDetailPage.classList.add("hidden");
@@ -3560,6 +3622,10 @@ function showModalElement(id) {
 
 function hideModalElement(id) {
   document.getElementById(id)?.classList.add("hidden");
+  if (id === "archivePasswordModal") {
+    els.archivePasswordInput.value = "";
+    els.archivePasswordError.textContent = "";
+  }
 }
 
 function getOpenModalId() {
@@ -3662,6 +3728,8 @@ async function onAppPopState(event) {
       showModalElement(route.modalId);
       if (route.modalId === "nameModal") {
         requestAnimationFrame(() => els.nameInput.focus());
+      } else if (route.modalId === "archivePasswordModal") {
+        requestAnimationFrame(() => els.archivePasswordInput.focus());
       }
     }
     state.currentHistoryState = route;
