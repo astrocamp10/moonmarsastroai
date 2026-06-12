@@ -455,25 +455,16 @@ const els = {
   elevationImage: $("#elevationImage"),
   roverImage: $("#roverImage"),
   roverTray: $("#roverTray"),
-  bodyBadge: $("#bodyBadge"),
-  coordChip: $("#coordChip"),
   backBtn: $("#backBtn"),
   sphereBtn: $("#sphereBtn"),
   flatBtn: $("#flatBtn"),
   roverBtn: $("#roverBtn"),
-  zoomControls: $("#zoomControls"),
-  zoomOutBtn: $("#zoomOutBtn"),
-  zoomInBtn: $("#zoomInBtn"),
-  zoomResetBtn: $("#zoomResetBtn"),
-  zoomLevel: $("#zoomLevel"),
   drawToggleBtn: $("#drawToggleBtn"),
   clearBtn: $("#clearBtn"),
   analyzeBtn: $("#analyzeBtn"),
   settingsBtn: $("#settingsBtn"),
   homeSettingsBtn: $("#homeSettingsBtn"),
   historyBtn: $("#historyBtn"),
-  homeHistoryBtn: $("#homeHistoryBtn"),
-  planBtn: $("#planBtn"),
   homePlanBtn: $("#homePlanBtn"),
   elevationControl: $("#elevationControl"),
   elevationRange: $("#elevationRange"),
@@ -641,9 +632,6 @@ function init() {
   els.sphereBtn.addEventListener("click", () => setViewMode("sphere"));
   els.flatBtn.addEventListener("click", () => setViewMode("flat"));
   els.roverBtn?.addEventListener("click", () => setViewMode("rover"));
-  els.zoomOutBtn?.addEventListener("click", () => stepZoom(-1));
-  els.zoomInBtn?.addEventListener("click", () => stepZoom(1));
-  els.zoomResetBtn?.addEventListener("click", () => resetZoom(true));
   els.drawToggleBtn.addEventListener("click", toggleDrawMode);
   els.clearBtn.addEventListener("click", () => clearDrawing(true));
   els.analyzeBtn.addEventListener("click", analyzeSelection);
@@ -663,7 +651,6 @@ function init() {
     renderArchiveList();
     els.archiveSearchInput.focus();
   });
-  els.planBtn?.addEventListener("click", openPlan);
   els.homePlanBtn.addEventListener("click", openPlan);
   els.clearHistoryBtn.addEventListener("click", clearHistory);
   els.clearPlanBtn.addEventListener("click", clearPlan);
@@ -746,9 +733,6 @@ async function selectBody(bodyKey, options = {}) {
   els.selectionScreen.classList.add("hidden");
   els.archiveScreen.classList.add("hidden");
   els.exploreScreen.classList.remove("hidden");
-  if (els.bodyBadge) {
-    els.bodyBadge.textContent = `${body.emoji} ${body.name}`;
-  }
   els.mapImage.src = body.map;
   els.mapImage.alt = `${body.name} 전체 지도`;
   els.roverBtn?.classList.toggle("hidden", bodyKey !== "mars");
@@ -812,16 +796,9 @@ function setViewMode(mode, options = {}) {
     resetZoom(false);
   }
 
-  if (mode === "sphere") {
-    state.drawMode = false;
-  } else if (mode === "flat") {
-    state.drawMode = false;
-  } else {
-    state.drawMode = false;
-  }
+  state.drawMode = false;
 
   updateDrawButton();
-  updateZoomControls();
   resizeCanvases();
   scheduleSphereRender();
 }
@@ -843,12 +820,6 @@ function updateDrawButton() {
   }
 }
 
-function stepZoom(direction) {
-  const current = getActiveZoom();
-  const next = current * (direction > 0 ? 1.25 : 0.8);
-  zoomTo(next, getCanvasCenter());
-}
-
 function onWheelZoom(event) {
   if (!state.bodyKey || !["sphere", "flat", "rover"].includes(state.viewMode)) return;
   event.preventDefault();
@@ -862,7 +833,6 @@ function zoomTo(nextScale, focalPoint = getCanvasCenter()) {
 
   if (state.viewMode === "sphere") {
     state.sphereZoom = clamp(nextScale, 0.75, 2.4);
-    updateZoomControls();
     renderDrawing();
     scheduleSphereRender();
     return;
@@ -877,7 +847,6 @@ function zoomTo(nextScale, focalPoint = getCanvasCenter()) {
   state.viewport.scale = scale;
   clampViewportPan();
   applyViewportTransform();
-  updateZoomControls();
   renderDrawing();
 
   if (scale > 1.02 && state.drawMode) {
@@ -898,7 +867,6 @@ function resetZoom(showMessage) {
   }
 
   applyViewportTransform();
-  updateZoomControls();
   renderDrawing();
 
   if (showMessage) {
@@ -938,15 +906,6 @@ function applyViewportTransform() {
   els.roverImage.style.transform = transform;
 }
 
-function updateZoomControls() {
-  if (!els.zoomLevel || !els.zoomOutBtn || !els.zoomInBtn) return;
-  const zoom = getActiveZoom();
-  const zoomText = zoom.toFixed(zoom >= 2 ? 1 : 2).replace(/\.?0+$/, "");
-  els.zoomLevel.textContent = `${zoomText}×`;
-  els.zoomOutBtn.disabled = zoom <= (state.viewMode === "sphere" ? 0.76 : 1.01);
-  els.zoomInBtn.disabled = zoom >= (state.viewMode === "sphere" ? 2.39 : 5.99);
-}
-
 function buildRoverTray() {
   els.roverTray.innerHTML = "";
   roverImages.forEach((src, index) => {
@@ -954,7 +913,7 @@ function buildRoverTray() {
     button.type = "button";
     button.className = "rover-thumb";
     button.title = `로버 사진 ${index + 1}`;
-    button.innerHTML = `<img src="${src}" alt="">`;
+    button.innerHTML = `<img src="${src}" loading="lazy" decoding="async" alt="">`;
     button.addEventListener("click", () => {
       setRoverImage(index);
       clearDrawing(false);
@@ -994,7 +953,6 @@ function resizeCanvases() {
 
   clampViewportPan();
   applyViewportTransform();
-  updateZoomControls();
   renderDrawing();
   scheduleSphereRender();
 }
@@ -1018,7 +976,6 @@ function onPointerDown(event) {
     const point = pointerPoint(event);
     const strokePoint = createStrokePoint(point, state.viewMode);
     if (!strokePoint) {
-      updateCoordChip(point);
       return;
     }
     state.isDrawing = true;
@@ -1027,7 +984,6 @@ function onPointerDown(event) {
       points: [strokePoint],
     };
     state.strokes.push(state.activeStroke);
-    updateCoordChip(point);
     renderDrawing();
     return;
   }
@@ -1069,14 +1025,12 @@ function onPointerMove(event) {
     const point = pointerPoint(event);
     const strokePoint = createStrokePoint(point, state.activeStroke.mode);
     if (!strokePoint) {
-      updateCoordChip(point);
       return;
     }
     const lastPoint = state.activeStroke.points[state.activeStroke.points.length - 1];
     const lastScreenPoint = strokePointToScreen(lastPoint, state.activeStroke.mode);
     if (!lastScreenPoint || distance(lastScreenPoint, point) > 1.8) {
       state.activeStroke.points.push(strokePoint);
-      updateCoordChip(point);
       renderDrawing();
     }
     return;
@@ -1091,10 +1045,6 @@ function onPointerMove(event) {
       x: event.clientX,
       y: event.clientY,
     };
-    updateCoordChip({
-      x: els.drawCanvas.width / 2,
-      y: els.drawCanvas.height / 2,
-    });
     renderDrawing();
     scheduleSphereRender();
     return;
@@ -2516,9 +2466,7 @@ async function saveArchiveRecord(record) {
     markdown: buildArchiveMarkdown(record),
   };
 
-  let supabaseSaved = false;
   let supabaseWarning = null;
-  let supabaseError = null;
 
   try {
     const supabaseRecord = await saveSupabaseArchiveRecord(archiveRecord);
@@ -2531,19 +2479,12 @@ async function saveArchiveRecord(record) {
     if (supabaseRecord.supabaseImageError) {
       supabaseWarning = `사진 저장 실패: ${supabaseRecord.supabaseImageError}`;
     }
-    supabaseSaved = true;
   } catch (error) {
-    supabaseError = error;
     console.warn("Supabase archive save failed:", error);
+    throw error || new Error("저장소를 사용할 수 없어요.");
   }
 
-  if (!supabaseSaved) {
-    throw supabaseError || new Error("저장소를 사용할 수 없어요.");
-  }
-
-  if (!supabaseSaved && supabaseError) {
-    showToast(`Supabase 저장 실패: ${supabaseError.message}`);
-  } else if (supabaseWarning) {
+  if (supabaseWarning) {
     showToast(`Supabase ${supabaseWarning}`);
   }
 
@@ -3430,10 +3371,6 @@ function getActiveModel() {
 
 function getActiveModelIds() {
   return [getActiveModel().id];
-}
-
-function updateCoordChip(point) {
-  void point;
 }
 
 function spherePointToGeo(x, y) {

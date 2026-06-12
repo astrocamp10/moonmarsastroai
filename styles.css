@@ -391,50 +391,6 @@ button {
   gap: 6px;
 }
 
-.zoom-tools {
-  align-items: stretch;
-}
-
-.zoom-level {
-  min-width: 48px;
-  min-height: 42px;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  padding: 0 10px;
-  border: 1px solid var(--line);
-  border-radius: 8px;
-  background: rgba(255, 255, 255, 0.08);
-  color: var(--cyan);
-  font-size: 0.92rem;
-  font-weight: 900;
-}
-
-.body-badge,
-.coord-chip {
-  min-height: 42px;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  gap: 8px;
-  padding: 0 12px;
-  border: 1px solid var(--line);
-  border-radius: 8px;
-  background: rgba(255, 255, 255, 0.08);
-  font-weight: 900;
-  white-space: nowrap;
-}
-
-.coord-chip {
-  position: absolute;
-  z-index: 9;
-  right: 16px;
-  bottom: 16px;
-  color: var(--muted);
-  background: rgba(8, 18, 31, 0.74);
-  backdrop-filter: blur(14px);
-}
-
 .bottom-analyze-button {
   position: absolute;
   z-index: 12;
@@ -1519,18 +1475,8 @@ button {
     gap: 6px;
   }
 
-  .body-badge {
-    flex: 1 1 120px;
-  }
-
   .primary-button {
     flex: 1 1 190px;
-  }
-
-  .coord-chip {
-    left: 14px;
-    right: 14px;
-    bottom: 88px;
   }
 
   .bottom-analyze-button {
@@ -1596,9 +1542,7 @@ button {
     min-height: 38px;
   }
 
-  .body-badge,
   .range-tool,
-  .zoom-level,
   .soft-button,
   .primary-button {
     min-height: 38px;
