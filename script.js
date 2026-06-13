@@ -170,10 +170,16 @@ const roverImages = [
 
 const MARS_REFERENCE_SOURCES = [
   "IAU/USGS Gazetteer of Planetary Nomenclature",
+  "USGS/IAU Mars nomenclature center point KML",
+  "로컬 전체 화성 명명 지형 JSON",
   "Mars Orbital Data Explorer planetary feature list",
+  "NASA Open Data Mars MOLA regional name maps",
   "USGS Mars Global Surveyor MOLA Topographic Map",
   "USGS Astrogeology MOLA Globe with IAU-approved feature names",
 ];
+const MARS_NOMENCLATURE_DATA_URL = "assets/mars-features.json";
+let marsNomenclatureDataPromise = null;
+let marsNomenclatureFeaturesCache = null;
 
 function marsFeature(name, kind, lat, lon, radiusDeg, origin, clue) {
   return {
@@ -185,6 +191,52 @@ function marsFeature(name, kind, lat, lon, radiusDeg, origin, clue) {
     origin,
     clue: clue || "IAU/USGS 중심 좌표 기준 명명 지형. 전역 지도에서 색, 밝기, 고도, 윤곽을 함께 확인",
   };
+}
+
+function marsGazetteerFeature(name, kind, category, lat, lon, radiusDeg, diameterKm, quad, origin) {
+  return marsFeature(
+    name,
+    kind,
+    lat,
+    lon,
+    radiusDeg,
+    origin,
+    buildMarsGazetteerClue(category, diameterKm, quad),
+  );
+}
+
+function buildMarsGazetteerClue(category, diameterKm, quad) {
+  const sizeText = diameterKm ? `약 ${diameterKm.toLocaleString("en-US")} km 규모. ` : "";
+  const regionText = quad ? `${quad} 구역의 ` : "";
+  const clueByCategory = {
+    terra: "오래된 고지대. 충돌구가 많은 남반구/경계부 지형을 볼 때 참고",
+    planitia: "넓고 낮은 평원. 전역 지도에서 낮은 고도와 완만한 색 변화를 확인",
+    planum: "고원 또는 평원. 주변 저지대와의 고도 차이를 함께 확인",
+    vallis: "긴 계곡/유출 수로. 선형 골짜기와 주변 저지대로 이어지는 흐름 방향을 확인",
+    chasma: "깊은 협곡. 가파른 벽과 어두운 바닥의 길쭉한 윤곽을 확인",
+    fossa: "길게 갈라진 균열/단층 지형. 평행한 선형 골과 틈을 확인",
+    chaos: "혼돈 지형. 무너진 블록, 불규칙한 골짜기, 울퉁불퉁한 밝기 변화를 확인",
+    mensa: "평정산/대지 지형. 평평한 윗면과 가파른 가장자리의 대비를 확인",
+    mons: "산지 또는 화산성 고지. 능선, 봉우리, 주변 사면을 함께 확인",
+    patera: "얕고 넓은 화산성 분화구. 낮은 테두리와 칼데라 같은 윤곽을 확인",
+    tholus: "작은 화산체. 둥근 돔과 주변 사면을 확인",
+    dorsum: "길게 이어지는 능선. 좁고 밝은 선형 고지처럼 보이는 곳을 확인",
+    rupes: "절벽/급경사면. 고도 변화가 갑자기 바뀌는 긴 경계를 확인",
+    cavus: "불규칙한 함몰지. 파인 구덩이와 낮은 지형이 모인 구역을 확인",
+    collis: "작은 언덕 지형군. 낮은 돔과 울퉁불퉁한 표면을 확인",
+    catena: "크레이터 사슬. 작은 원형 함몰지가 줄지어 이어지는 패턴을 확인",
+    sulcus: "홈·능선 지형. 긁힌 듯한 줄무늬와 평행 능선을 확인",
+    unda: "사구 지형. 바람이 만든 물결무늬와 어두운 모래 분포를 확인",
+    palus: "낮고 평탄한 평원. 주변 고지와 대비되는 완만한 지대를 확인",
+    labyrinthus: "미로 지형. 서로 교차하는 골짜기와 블록형 구조를 확인",
+    lingula: "혀 모양 극지 지형. 얼음층 가장자리의 길게 뻗은 돌출부를 확인",
+    scopulus: "불규칙 절벽. 들쭉날쭉한 경사 경계와 층상 가장자리를 확인",
+    fluctus: "흐름 지형. 용암이나 유동성 퇴적물이 흐른 듯한 완만한 윤곽을 확인",
+    serpens: "구불구불한 선형 지형. 휘어진 능선 또는 골을 확인",
+    labes: "산사태 퇴적 지형. 협곡 벽 아래 부채꼴 퇴적 흔적을 확인",
+  };
+
+  return `${sizeText}${regionText}${clueByCategory[category] || "공식 명명 지형. 주변 윤곽과 고도 차이를 함께 확인"}`;
 }
 
 const MARS_FEATURE_REFERENCES = [
@@ -301,12 +353,204 @@ const MARS_OFFICIAL_FEATURE_REFERENCES = [
   marsFeature("Gordii Dorsum", "능선", 4.1069, -144.142, 5.0, "고전 알베도 지형명에서 온 이름", "Tharsis 서쪽의 길게 이어지는 능선 지형"),
 ];
 
+const MARS_DETAILED_FEATURE_REFERENCES = [
+  ["Terra Sabaea", "고지대", "terra", 2.7188, 51.3035, 24, 4688, "Syrtis Major", "고전 알베도 지형명에서 온 이름"],
+  ["Aonia Terra", "고지대", "terra", -60.2034, -97.0453, 24, 3873, "Thaumasia", "고전 알베도 지형명에서 온 이름"],
+  ["Tyrrhena Terra", "고지대", "terra", -11.899, 88.8357, 15.4, 2470, "Iapygia", "고전 알베도 지형명에서 온 이름"],
+  ["Eridania Planitia", "저지 평원", "planitia", -38.1485, 122.2145, 6.6, 1062, "Eridania", "고전 알베도 지형명에서 온 이름"],
+  ["Daedalia Planum", "고원/평원", "planum", -18.3477, -125.9495, 12, 1922, "Phoenicis Lacus", "고전 알베도 지형명에서 온 이름"],
+  ["Lunae Planum", "고원/평원", "planum", 10.7933, -65.5123, 11.4, 1818, "Lunae Palus", "고전 알베도 지형명에서 온 이름"],
+  ["Solis Planum", "고원/평원", "planum", -26.3994, -89.6669, 11.3, 1811, "Coprates", "고전 알베도 지형명에서 온 이름"],
+  ["Nepenthes Planum", "고원/평원", "planum", 14.0097, 113.792, 10.3, 1650, "Amenthes", "고전 알베도 지형명에서 온 이름"],
+  ["Argentea Planum", "고원/평원", "planum", -72.4944, -61.6655, 8.6, 1371, "Mare Australe", "고전 알베도 지형명에서 온 이름"],
+  ["Sisyphi Planum", "고원/평원", "planum", -69.6417, 6.4135, 6.5, 1033, "Mare Australe", "고전 알베도 지형명에서 온 이름"],
+  ["Parva Planum", "고원/평원", "planum", -73.6689, -95.071, 6.4, 1027, "Mare Australe", "고전 알베도 지형명에서 온 이름"],
+  ["Amenthes Planum", "고원/평원", "planum", 3.4, 105.92, 6, 953, "Amenthes", "고전 알베도 지형명에서 온 이름"],
+  ["Sinai Planum", "고원/평원", "planum", -13.7205, -87.7617, 5.6, 901, "Coprates", "고전 알베도 지형명에서 온 이름"],
+  ["Lucus Planum", "고원/평원", "planum", -4.99, -177.17, 5.6, 900, "Memnonia", "고전 알베도 지형명에서 온 이름"],
+  ["Malea Planum", "고원/평원", "planum", -65.8214, 62.9429, 5.5, 872, "Mare Australe", "고전 알베도 지형명에서 온 이름"],
+  ["Aeolis Planum", "고원/평원", "planum", -1.1366, 144.7648, 5.3, 853, "Aeolis", "고전 알베도 지형명에서 온 이름"],
+  ["Promethei Planum", "고원/평원", "planum", -79.1841, 88.3602, 5.2, 831, "Mare Australe", "고전 알베도 지형명에서 온 이름"],
+  ["Olympia Planum", "고원/평원", "planum", 82.18, -171.19, 5, 804, "Mare Boreum", "고전 알베도 지형명에서 온 이름"],
+  ["Thaumasia Planum", "고원/평원", "planum", -21.6566, -65.2236, 5, 800, "Coprates", "고전 알베도 지형명에서 온 이름"],
+  ["Syria Planum", "고원/평원", "planum", -12.0883, -103.9002, 4.6, 736, "Phoenicis Lacus", "고전 알베도 지형명에서 온 이름"],
+  ["Bosporos Planum", "고원/평원", "planum", -33.8722, -64.4937, 4.6, 730, "Thaumasia", "고전 알베도 지형명에서 온 이름"],
+  ["Ogygis Planum", "고원/평원", "planum", -40.96, -60.77, 4.4, 711, "Thaumasia", "고전 알베도 지형명에서 온 이름"],
+  ["Ophir Planum", "고원/평원", "planum", -8.4548, -57.8201, 4, 642, "Coprates", "고전 알베도 지형명에서 온 이름"],
+  ["Ascuris Planum", "고원/평원", "planum", 40.5923, -80.7765, 3.9, 618, "Arcadia", "고전 알베도 지형명에서 온 이름"],
+  ["Planum Chronium", "고원/평원", "planum", -59.1362, 139.4978, 3.6, 576, "Eridania", "고전 알베도 지형명에서 온 이름"],
+  ["Zephyria Planum", "고원/평원", "planum", -1.0807, 153.7297, 3.6, 575, "Aeolis", "고전 알베도 지형명에서 온 이름"],
+  ["Icaria Planum", "고원/평원", "planum", -43.2703, -106.0356, 3.5, 567, "Thaumasia", "고전 알베도 지형명에서 온 이름"],
+  ["Aurorae Planum", "고원/평원", "planum", -10.4129, -48.6217, 3.5, 564, "Coprates", "고전 알베도 지형명에서 온 이름"],
+  ["Oxia Planum", "고원/평원", "planum", 17.28, -25.71, 2.5, 231, "Oxia Palus", "고전 알베도 지형명에서 온 이름"],
+  ["Nili Planum", "고원/평원", "planum", 18.6, 77.1, 2.5, 129, "Syrtis Major", "고전 알베도 지형명에서 온 이름"],
+  ["Tiu Valles", "계곡/유출 수로", "vallis", 16.2262, -34.8618, 11.5, 1720, "Oxia Palus", "여러 언어에서 '화성'을 뜻하는 말에서 온 이름"],
+  ["Marikh Vallis", "계곡/유출 수로", "vallis", -19.1583, 4.3191, 7.6, 1147, "Sinus Sabaeus", "여러 언어에서 '화성'을 뜻하는 말에서 온 이름"],
+  ["Reull Vallis", "계곡/유출 수로", "vallis", -42.1449, 104.9524, 7, 1052, "Hellas", "IAU/USGS Gazetteer 공식 명명 지형. 세부 유래는 원문 확인 필요"],
+  ["Shalbatana Vallis", "계곡/유출 수로", "vallis", 7.327, -42.0899, 6.9, 1029, "Oxia Palus", "여러 언어에서 '화성'을 뜻하는 말에서 온 이름"],
+  ["Mamers Valles", "계곡/유출 수로", "vallis", 40.6537, 17.9437, 6.8, 1020, "Ismenius Lacus", "여러 언어에서 '화성'을 뜻하는 말에서 온 이름"],
+  ["Simud Valles", "계곡/유출 수로", "vallis", 19.0867, -38.0075, 6.6, 988, "Oxia Palus", "여러 언어에서 '화성'을 뜻하는 말에서 온 이름"],
+  ["Hrad Vallis", "계곡/유출 수로", "vallis", 38.1681, 135.9131, 6.5, 974, "Cebrenia", "여러 언어에서 '화성'을 뜻하는 말에서 온 이름"],
+  ["Ma'adim Vallis", "계곡/유출 수로", "vallis", -21.9808, 177.5021, 6.1, 913, "Aeolis", "여러 언어에서 '화성'을 뜻하는 말에서 온 이름"],
+  ["Dao Vallis", "계곡/유출 수로", "vallis", -37.6126, 88.8868, 5.3, 794, "Hellas", "IAU/USGS Gazetteer 공식 명명 지형. 세부 유래는 원문 확인 필요"],
+  ["Loire Valles", "계곡/유출 수로", "vallis", -17.6927, -17.0299, 5.3, 790, "Margaritifer Sinus", "지구의 강 이름에서 온 이름"],
+  ["Granicus Valles", "계곡/유출 수로", "vallis", 30.5765, 129.9709, 5.2, 778, "Cebrenia", "지구의 강 이름에서 온 이름"],
+  ["Naktong Vallis", "계곡/유출 수로", "vallis", 4.8874, 33.3932, 4.5, 670, "Arabia", "지구의 강 이름에서 온 이름"],
+  ["Samara Valles", "계곡/유출 수로", "vallis", -24.1682, -18.7291, 4.4, 662, "Margaritifer Sinus", "지구의 강 이름에서 온 이름"],
+  ["Al-Qahira Vallis", "계곡/유출 수로", "vallis", -18.2333, 162.4073, 4, 600, "Aeolis", "여러 언어에서 '화성'을 뜻하는 말에서 온 이름"],
+  ["Liris Valles", "계곡/유출 수로", "vallis", -10.4952, 58.2466, 4, 596, "Iapygia", "지구의 강 이름에서 온 이름"],
+  ["Nanedi Valles", "계곡/유출 수로", "vallis", 5.0487, -48.6163, 3.7, 550, "Lunae Palus", "IAU/USGS Gazetteer 공식 명명 지형. 세부 유래는 원문 확인 필요"],
+  ["Mad Vallis", "계곡/유출 수로", "vallis", -56.2729, 76.4676, 3.6, 537, "Hellas", "지구의 강 이름에서 온 이름"],
+  ["Enipeus Vallis", "계곡/유출 수로", "vallis", 36.7964, -92.7979, 3.5, 527, "Arcadia", "지구의 강 이름에서 온 이름"],
+  ["Harmakhis Vallis", "계곡/유출 수로", "vallis", -40.9776, 90.0638, 3.5, 527, "Hellas", "여러 언어에서 '화성'을 뜻하는 말에서 온 이름"],
+  ["Louros Valles", "계곡/유출 수로", "vallis", -8.41, -81.7746, 3.4, 516, "Coprates", "지구의 강 이름에서 온 이름"],
+  ["Navua Valles", "계곡/유출 수로", "vallis", -33.9351, 82.6838, 3.3, 500, "Hellas", "지구의 강 이름에서 온 이름"],
+  ["Chico Valles", "계곡/유출 수로", "vallis", -66.7688, -152.2323, 3, 446, "Mare Australe", "지구의 강 이름에서 온 이름"],
+  ["Naro Vallis", "계곡/유출 수로", "vallis", -3.997, 60.7115, 3, 443, "Iapygia", "지구의 강 이름에서 온 이름"],
+  ["Vichada Valles", "계곡/유출 수로", "vallis", -19.8709, 88.1348, 2.9, 438, "Iapygia", "지구의 강 이름에서 온 이름"],
+  ["Gediz Vallis", "계곡/유출 수로", "vallis", -4.8537, 137.4362, 2.2, 8, "Aeolis", "지구의 강 이름에서 온 이름"],
+  ["Chasma Boreale", "협곡", "chasma", 82.5412, -47.6403, 3.2, 460, "Mare Boreum", "고전 알베도 지형명에서 온 이름"],
+  ["Echus Chasma", "협곡", "chasma", 2.4716, -79.9618, 2.7, 391, "Lunae Palus", "고전 알베도 지형명에서 온 이름"],
+  ["Chasma Australe", "협곡", "chasma", -82.3546, 95.0315, 2.5, 353, "Mare Australe", "고전 알베도 지형명에서 온 이름"],
+  ["Ultimum Chasma", "협곡", "chasma", -81.0972, 151.3677, 2.5, 322, "Mare Australe", "고전 알베도 지형명에서 온 이름"],
+  ["Juventae Chasma", "협곡", "chasma", -3.3662, -61.387, 2.5, 305, "Coprates", "고전 알베도 지형명에서 온 이름"],
+  ["Promethei Chasma", "협곡", "chasma", -82.664, 141.3855, 2.5, 295, "Mare Australe", "고전 알베도 지형명에서 온 이름"],
+  ["Hellas Chasma", "협곡", "chasma", -34.6372, 65.466, 2.5, 148, "Hellas", "고전 알베도 지형명에서 온 이름"],
+  ["Elysium Chasma", "협곡", "chasma", 22.3852, 141.5142, 2.5, 130, "Elysium", "고전 알베도 지형명에서 온 이름"],
+  ["Sirenum Fossae", "균열 지형", "fossa", -35.5739, -162.7382, 14, 2731, "Phaethontis", "고전 알베도 지형명에서 온 이름"],
+  ["Tantalus Fossae", "균열 지형", "fossa", 49.8345, -96.087, 14, 2362, "Arcadia", "고전 알베도 지형명에서 온 이름"],
+  ["Tempe Fossae", "균열 지형", "fossa", 40.4186, -71.4002, 14, 2116, "Arcadia", "고전 알베도 지형명에서 온 이름"],
+  ["Icaria Fossae", "균열 지형", "fossa", -48.0888, -125.1617, 14, 2115, "Phaethontis", "고전 알베도 지형명에서 온 이름"],
+  ["Alba Fossae", "균열 지형", "fossa", 49.3945, -106.8249, 14, 2072, "Arcadia", "고전 알베도 지형명에서 온 이름"],
+  ["Claritas Fossae", "균열 지형", "fossa", -27.8873, -104.2377, 14, 2031, "Phoenicis Lacus", "고전 알베도 지형명에서 온 이름"],
+  ["Mareotis Fossae", "균열 지형", "fossa", 44.3428, -76.1231, 13.2, 1908, "Arcadia", "고전 알베도 지형명에서 온 이름"],
+  ["Memnonia Fossae", "균열 지형", "fossa", -23.6269, -153.8211, 10.9, 1585, "Memnonia", "고전 알베도 지형명에서 온 이름"],
+  ["Labeatis Fossae", "균열 지형", "fossa", 24.5762, -84.5281, 10.3, 1496, "Lunae Palus", "IAU/USGS Gazetteer 공식 명명 지형. 세부 유래는 원문 확인 필요"],
+  ["Ceraunius Fossae", "균열 지형", "fossa", 27.0037, -110.1478, 8, 1167, "Tharsis", "고전 알베도 지형명에서 온 이름"],
+  ["Elysium Fossae", "균열 지형", "fossa", 24.076, 146.1428, 7.2, 1044, "Elysium", "고전 알베도 지형명에서 온 이름"],
+  ["Thaumasia Fossae", "균열 지형", "fossa", -47.7503, -91.049, 6.9, 996, "Thaumasia", "고전 알베도 지형명에서 온 이름"],
+  ["Sacra Fossae", "균열 지형", "fossa", 20.3611, -70.0009, 6.6, 950, "Lunae Palus", "고전 알베도 지형명에서 온 이름"],
+  ["Cyane Fossae", "균열 지형", "fossa", 31.2538, -121.1714, 6.3, 913, "Diacria", "고전 알베도 지형명에서 온 이름"],
+  ["Acheron Fossae", "균열 지형", "fossa", 38.2742, -135.0238, 4.8, 703, "Diacria", "고전 알베도 지형명에서 온 이름"],
+  ["Aurorae Chaos", "혼돈 지형", "chaos", -8.4693, -34.8149, 5.3, 714, "Margaritifer Sinus", "고전 알베도 지형명에서 온 이름"],
+  ["Chryse Chaos", "혼돈 지형", "chaos", 9.8646, -37.1896, 4.9, 659, "Oxia Palus", "고전 알베도 지형명에서 온 이름"],
+  ["Hellas Chaos", "혼돈 지형", "chaos", -47.1212, 64.4081, 4.4, 591, "Hellas", "고전 알베도 지형명에서 온 이름"],
+  ["Eos Chaos", "혼돈 지형", "chaos", -16.8183, -46.522, 3.7, 498, "Coprates", "고전 알베도 지형명에서 온 이름"],
+  ["Echus Chaos", "혼돈 지형", "chaos", 10.7879, -74.719, 3.6, 481, "Lunae Palus", "고전 알베도 지형명에서 온 이름"],
+  ["Margaritifer Chaos", "혼돈 지형", "chaos", -9.3015, -21.7046, 2.8, 384, "Margaritifer Sinus", "고전 알베도 지형명에서 온 이름"],
+  ["Hydaspis Chaos", "혼돈 지형", "chaos", 3.0875, -26.929, 2.5, 336, "Oxia Palus", "고전 알베도 지형명에서 온 이름"],
+  ["Nilus Chaos", "혼돈 지형", "chaos", 25.3871, -76.9547, 2.5, 283, "Lunae Palus", "고전 알베도 지형명에서 온 이름"],
+  ["Galaxias Chaos", "혼돈 지형", "chaos", 33.8276, 146.5183, 2.5, 234, "Cebrenia", "고전 알베도 지형명에서 온 이름"],
+  ["Aeolis Chaos", "혼돈 지형", "chaos", -7.13, 150.6, 2.5, 201, "Aeolis", "고전 알베도 지형명에서 온 이름"],
+  ["Atlantis Chaos", "혼돈 지형", "chaos", -34.2757, -177.309, 2.5, 181, "Phaethontis", "고전 알베도 지형명에서 온 이름"],
+  ["Pyrrhae Chaos", "혼돈 지형", "chaos", -10.4609, -28.3994, 2.5, 162, "Margaritifer Sinus", "고전 알베도 지형명에서 온 이름"],
+  ["Nepenthes Mensae", "평정산/대지 지형", "mensa", 9.1922, 119.4206, 14, 2176, "Amenthes", "고전 알베도 지형명에서 온 이름"],
+  ["Protonilus Mensae", "평정산/대지 지형", "mensa", 43.8694, 48.8636, 7.7, 1034, "Ismenius Lacus", "고전 알베도 지형명에서 온 이름"],
+  ["Deuteronilus Mensae", "평정산/대지 지형", "mensa", 45.1095, 23.9184, 6.8, 919, "Ismenius Lacus", "고전 알베도 지형명에서 온 이름"],
+  ["Aeolis Mensae", "평정산/대지 지형", "mensa", -3.2532, 140.6307, 5.8, 785, "Aeolis", "고전 알베도 지형명에서 온 이름"],
+  ["Cydonia Mensae", "평정산/대지 지형", "mensa", 34.5618, -12.3333, 5.7, 765, "Mare Acidalium", "고전 알베도 지형명에서 온 이름"],
+  ["Nilosyrtis Mensae", "평정산/대지 지형", "mensa", 34.7749, 68.4704, 5, 676, "Casius", "고전 알베도 지형명에서 온 이름"],
+  ["Sacra Mensa", "평정산/대지 지형", "mensa", 24.642, -68.2152, 4.3, 577, "Lunae Palus", "고전 알베도 지형명에서 온 이름"],
+  ["Nilokeras Mensae", "평정산/대지 지형", "mensa", 30.4806, -51.9487, 3.3, 451, "Mare Acidalium", "고전 알베도 지형명에서 온 이름"],
+  ["Amazonis Mensa", "평정산/대지 지형", "mensa", -1.9776, -146.9043, 3.1, 414, "Memnonia", "고전 알베도 지형명에서 온 이름"],
+  ["Eos Mensa", "평정산/대지 지형", "mensa", -11.009, -42.1609, 2.6, 347, "Margaritifer Sinus", "고전 알베도 지형명에서 온 이름"],
+  ["Phlegra Montes", "산맥/산지", "mons", 40.3967, 163.7142, 10, 1351, "Cebrenia", "고전 알베도 지형명에서 온 이름"],
+  ["Nereidum Montes", "산맥/산지", "mons", -37.5732, -43.2113, 8.5, 1143, "Argyre", "고전 알베도 지형명에서 온 이름"],
+  ["Tartarus Montes", "산맥/산지", "mons", 15.4593, 167.5435, 8, 1086, "Elysium", "고전 알베도 지형명에서 온 이름"],
+  ["Libya Montes", "산맥/산지", "mons", 1.4424, 88.2284, 7.7, 1044, "Syrtis Major", "고전 알베도 지형명에서 온 이름"],
+  ["Charitum Montes", "산맥/산지", "mons", -58.0971, -40.2921, 6.9, 934, "Argyre", "고전 알베도 지형명에서 온 이름"],
+  ["Erebus Montes", "산맥/산지", "mons", 35.6613, -174.9771, 6, 812, "Diacria", "고전 알베도 지형명에서 온 이름"],
+  ["Hellespontus Montes", "산맥/산지", "mons", -44.3682, 42.7599, 5.3, 711, "Noachis", "고전 알베도 지형명에서 온 이름"],
+  ["Xanthe Montes", "산맥/산지", "mons", 18.132, -54.9182, 3.7, 499, "Lunae Palus", "고전 알베도 지형명에서 온 이름"],
+  ["Hadriacus Mons", "산/화산", "mons", -31.2938, 91.8567, 3.3, 450, "Hellas", "고전 알베도 지형명에서 온 이름"],
+  ["Australe Montes", "산맥/산지", "mons", -80.1866, 14.0518, 3, 412, "Mare Australe", "고전 알베도 지형명에서 온 이름"],
+  ["Echus Montes", "산맥/산지", "mons", 7.8145, -77.95, 2.9, 397, "Lunae Palus", "고전 알베도 지형명에서 온 이름"],
+  ["Thyles Montes", "산맥/산지", "mons", -69.8798, 126.5379, 2.8, 380, "Mare Australe", "고전 알베도 지형명에서 온 이름"],
+  ["Geryon Montes", "산맥/산지", "mons", -7.7235, -81.6163, 2.8, 378, "Coprates", "고전 알베도 지형명에서 온 이름"],
+  ["Coprates Montes", "산맥/산지", "mons", -13.0007, -65.3908, 2.6, 350, "Coprates", "고전 알베도 지형명에서 온 이름"],
+  ["Phison Patera", "화산성 분화구", "patera", 30.27, 48.7, 3.7, 506, "Ismenius Lacus", "고전 알베도 지형명에서 온 이름"],
+  ["Orcus Patera", "화산성 분화구", "patera", 14.1332, 178.3538, 2.9, 388, "Elysium", "고전 알베도 지형명에서 온 이름"],
+  ["Malea Patera", "화산성 분화구", "patera", -63.5428, 51.5855, 2.2, 242, "Noachis", "고전 알베도 지형명에서 온 이름"],
+  ["Pityusa Patera", "화산성 분화구", "patera", -66.8798, 36.8634, 2.2, 197, "Mare Australe", "고전 알베도 지형명에서 온 이름"],
+  ["Amphitrites Patera", "화산성 분화구", "patera", -58.6962, 60.8676, 2.2, 130, "Hellas", "고전 알베도 지형명에서 온 이름"],
+  ["Peneus Patera", "화산성 분화구", "patera", -57.8166, 52.6453, 2.2, 129, "Noachis", "고전 알베도 지형명에서 온 이름"],
+  ["Uranius Patera", "화산성 분화구", "patera", 26.3168, -92.804, 2.2, 114, "Tharsis", "고전 알베도 지형명에서 온 이름"],
+  ["Apollinaris Patera", "화산성 분화구", "patera", -8.5743, 174.1825, 2.2, 90, "Aeolis", "고전 알베도 지형명에서 온 이름"],
+  ["Hadriaca Patera", "화산성 분화구", "patera", -30.2002, 92.7923, 2.2, 66, "Hellas", "고전 알베도 지형명에서 온 이름"],
+  ["Tyrrhena Patera", "화산성 분화구", "patera", -21.3872, 106.6256, 2.2, 13, "Mare Tyrrhenum", "고전 알베도 지형명에서 온 이름"],
+  ["Cerberus Tholi", "작은 화산", "tholus", 4.4815, 164.414, 5.2, 698, "Elysium", "고전 알베도 지형명에서 온 이름"],
+  ["Scandia Tholi", "작은 화산", "tholus", 73.9139, -158.7197, 3, 398, "Mare Boreum", "고전 알베도 지형명에서 온 이름"],
+  ["Cimmeria Tholi", "작은 화산", "tholus", -34.59, 158.55, 2.2, 222, "Eridania", "고전 알베도 지형명에서 온 이름"],
+  ["Sinai Tholus", "작은 화산", "tholus", -15.54, -80.03, 2.2, 200, "Coprates", "고전 알베도 지형명에서 온 이름"],
+  ["Biblis Tholus", "작은 화산", "tholus", 2.5236, -124.3827, 2.2, 169, "Tharsis", "고전 알베도 지형명에서 온 이름"],
+  ["Albor Tholus", "작은 화산", "tholus", 18.867, 150.4661, 2.2, 158, "Elysium", "고전 알베도 지형명에서 온 이름"],
+  ["Phlegra Dorsa", "능선", "dorsum", 25.08, 170.37, 14, 2819, "Elysium", "고전 알베도 지형명에서 온 이름"],
+  ["Arcadia Dorsa", "능선", "dorsum", 55.8961, -137.5601, 13.5, 1953, "Diacria", "고전 알베도 지형명에서 온 이름"],
+  ["Sacra Dorsa", "능선", "dorsum", 11.2146, -66.0857, 9.8, 1416, "Lunae Palus", "고전 알베도 지형명에서 온 이름"],
+  ["Isidis Dorsa", "능선", "dorsum", 12.9239, 88.2121, 7.4, 1075, "Syrtis Major", "고전 알베도 지형명에서 온 이름"],
+  ["Hyblaeus Dorsa", "능선", "dorsum", 13.1629, 130.3232, 6.1, 888, "Amenthes", "고전 알베도 지형명에서 온 이름"],
+  ["Hesperia Dorsa", "능선", "dorsum", -22.8014, 113.1555, 5.6, 818, "Mare Tyrrhenum", "고전 알베도 지형명에서 온 이름"],
+  ["Utopia Rupēs", "절벽/급경사면", "rupes", 43.5326, 86.0326, 14, 2493, "Casius", "고전 알베도 지형명에서 온 이름"],
+  ["Olympus Rupes", "절벽/급경사면", "rupes", 18.402, -133.5645, 13.2, 1915, "Tharsis", "고전 알베도 지형명에서 온 이름"],
+  ["Hephaestus Rupēs", "절벽/급경사면", "rupes", 23.5385, 114.9028, 11.8, 1707, "Amenthes", "고전 알베도 지형명에서 온 이름"],
+  ["Cydnus Rupēs", "절벽/급경사면", "rupes", 52.5315, 112.2092, 10.7, 1551, "Casius", "고전 알베도 지형명에서 온 이름"],
+  ["Promethei Rupes", "절벽/급경사면", "rupes", -75.5416, 90.2434, 9.5, 1379, "Mare Australe", "고전 알베도 지형명에서 온 이름"],
+  ["Olympia Rupēs", "절벽/급경사면", "rupes", 86.0386, 174.1646, 8.3, 1197, "Mare Boreum", "고전 알베도 지형명에서 온 이름"],
+  ["Amenthes Cavi", "불규칙 함몰지", "cavus", 16.231, 114.5201, 9.9, 1330, "Amenthes", "고전 알베도 지형명에서 온 이름"],
+  ["Scandia Cavi", "불규칙 함몰지", "cavus", 77.553, -150.3482, 4.9, 664, "Mare Boreum", "고전 알베도 지형명에서 온 이름"],
+  ["Cavi Angusti", "불규칙 함몰지", "cavus", -78.1636, -74.7473, 4.7, 640, "Mare Australe", "고전 알베도 지형명에서 온 이름"],
+  ["Sisyphi Cavi", "불규칙 함몰지", "cavus", -72.2, -6.3, 3.1, 424, "Mare Australe", "고전 알베도 지형명에서 온 이름"],
+  ["Tartarus Colles", "언덕 지형군", "collis", 21.245, 175.189, 11.5, 1673, "Elysium", "고전 알베도 지형명에서 온 이름"],
+  ["Scandia Colles", "언덕 지형군", "collis", 65.467, -139.1276, 10.5, 1522, "Mare Boreum", "고전 알베도 지형명에서 온 이름"],
+  ["Colles Nili", "언덕 지형군", "collis", 38.7204, 62.8762, 4.5, 654, "Casius", "고전 알베도 지형명에서 온 이름"],
+  ["Alpheus Colles", "언덕 지형군", "collis", -39.3795, 61.5326, 4.4, 633, "Hellas", "고전 알베도 지형명에서 온 이름"],
+  ["Syria Colles", "언덕 지형군", "collis", -13.4615, -100.7314, 4.3, 630, "Phoenicis Lacus", "고전 알베도 지형명에서 온 이름"],
+  ["Galaxias Colles", "언덕 지형군", "collis", 36.8022, 147.4815, 4.2, 610, "Cebrenia", "고전 알베도 지형명에서 온 이름"],
+  ["Tractus Catena", "크레이터 사슬", "catena", 26.9991, -102.7917, 6.3, 911, "Tharsis", "고전 알베도 지형명에서 온 이름"],
+  ["Tithoniae Catenae", "크레이터 사슬", "catena", -5.4957, -81.8244, 3.9, 562, "Coprates", "고전 알베도 지형명에서 온 이름"],
+  ["Ophir Catenae", "크레이터 사슬", "catena", -9.46, -59.4, 3.5, 509, "Coprates", "고전 알베도 지형명에서 온 이름"],
+  ["Acheron Catena", "크레이터 사슬", "catena", 37.474, -100.7965, 2.9, 422, "Arcadia", "고전 알베도 지형명에서 온 이름"],
+  ["Phlegethon Catena", "크레이터 사슬", "catena", 38.8251, -103.2762, 2.8, 400, "Arcadia", "고전 알베도 지형명에서 온 이름"],
+  ["Lycus Sulci", "홈·능선 지형", "sulcus", 28.1404, -144.4701, 9.3, 1351, "Amazonis", "고전 알베도 지형명에서 온 이름"],
+  ["Sacra Sulci", "홈·능선 지형", "sulcus", 22.1627, -74.7, 7, 1009, "Lunae Palus", "고전 알베도 지형명에서 온 이름"],
+  ["Arsia Sulci", "홈·능선 지형", "sulcus", -6.2853, -129.812, 3.4, 500, "Phoenicis Lacus", "고전 알베도 지형명에서 온 이름"],
+  ["Memnonia Sulci", "홈·능선 지형", "sulcus", -7.1612, -175.8269, 3.1, 453, "Memnonia", "고전 알베도 지형명에서 온 이름"],
+  ["Pavonis Sulci", "홈·능선 지형", "sulcus", 4.0135, -117.3686, 2.9, 426, "Tharsis", "고전 알베도 지형명에서 온 이름"],
+  ["Olympia Undae", "사구 지형", "unda", 81.16, 178.48, 11.2, 1508, "Mare Boreum", "고전 알베도 지형명에서 온 이름"],
+  ["Hyperboreae Undae", "사구 지형", "unda", 79.965, -49.4855, 3.4, 464, "Mare Boreum", "고전 알베도 지형명에서 온 이름"],
+  ["Abalos Undae", "사구 지형", "unda", 78.5167, -87.4993, 3.3, 443, "Mare Boreum", "고전 알베도 지형명에서 온 이름"],
+  ["Siton Undae", "사구 지형", "unda", 75.5509, -62.7197, 2.5, 223, "Mare Boreum", "고전 알베도 지형명에서 온 이름"],
+  ["Peneus Palus", "낮은 평원", "palus", -35.0558, 56.7106, 6.4, 870, "Noachis", "고전 알베도 지형명에서 온 이름"],
+  ["Echus Palus", "낮은 평원", "palus", 12.29, -77.27, 5.3, 715, "Lunae Palus", "고전 알베도 지형명에서 온 이름"],
+  ["Cerberus Palus", "낮은 평원", "palus", 5.7765, 148.1452, 3.5, 467, "Elysium", "고전 알베도 지형명에서 온 이름"],
+  ["Adamas Labyrinthus", "미로 지형", "labyrinthus", 35.7035, 105.1166, 6.3, 853, "Casius", "고전 알베도 지형명에서 온 이름"],
+  ["Cydonia Labyrinthus", "미로 지형", "labyrinthus", 41.2907, -12.0566, 2.5, 344, "Mare Acidalium", "고전 알베도 지형명에서 온 이름"],
+  ["Gemina Lingula", "혀 모양 극지 지형", "lingula", 81.87, 2.59, 5.7, 773, "Mare Boreum", "고전 알베도 지형명에서 온 이름"],
+  ["Promethei Lingula", "혀 모양 극지 지형", "lingula", -82.7969, 119.892, 4.2, 572, "Mare Australe", "고전 알베도 지형명에서 온 이름"],
+  ["Ultima Lingula", "혀 모양 극지 지형", "lingula", -76.3219, 142.5628, 4.1, 551, "Mare Australe", "고전 알베도 지형명에서 온 이름"],
+  ["Oenotria Scopuli", "불규칙 절벽", "scopulus", -6.62, 77.11, 9.8, 1425, "Iapygia", "고전 알베도 지형명에서 온 이름"],
+  ["Eridania Scopulus", "불규칙 절벽", "scopulus", -52.6127, 141.7941, 7, 1018, "Eridania", "고전 알베도 지형명에서 온 이름"],
+  ["Gemini Scopuli", "불규칙 절벽", "scopulus", 80.39, 26.1, 6.9, 1000, "Mare Boreum", "고전 알베도 지형명에서 온 이름"],
+  ["Nilokeras Scopulus", "불규칙 절벽", "scopulus", 31.7153, -55.8519, 6.2, 901, "Mare Acidalium", "고전 알베도 지형명에서 온 이름"],
+  ["Tantalus Fluctus", "용암 흐름 지형", "fluctus", 35.9263, -95.6842, 5.9, 794, "Arcadia", "고전 알베도 지형명에서 온 이름"],
+  ["Galaxias Fluctūs", "용암 흐름 지형", "fluctus", 30.9565, 143.0287, 4.5, 607, "Cebrenia", "고전 알베도 지형명에서 온 이름"],
+  ["Aeolis Serpens", "구불구불한 선형 지형", "serpens", -1.3843, 149.5679, 4, 539, "Aeolis", "고전 알베도 지형명에서 온 이름"],
+  ["Thymiamata Serpens", "구불구불한 선형 지형", "serpens", 10.47, -7.83, 2.5, 158, "Oxia Palus", "고전 알베도 지형명에서 온 이름"],
+  ["Candor Labes", "산사태 퇴적 지형", "labes", -4.7907, -75.9949, 2.2, 135, "Coprates", "고전 알베도 지형명에서 온 이름"],
+  ["Melas Labes", "산사태 퇴적 지형", "labes", -8.5318, -71.7036, 2.2, 107, "Coprates", "고전 알베도 지형명에서 온 이름"],
+].map((feature) => marsGazetteerFeature(...feature));
+
 const MOON_REFERENCE_SOURCES = [
   "IAU/USGS Gazetteer of Planetary Nomenclature",
+  "USGS/IAU Moon nomenclature center point KML",
+  "로컬 전체 달 명명 지형 JSON",
   "Lunar Orbital Data Explorer planetary feature list",
   "USGS Moon LOLA 2011 nomenclature center points",
   "NASA SVS CGI Moon Kit color and elevation maps",
 ];
+const MOON_NOMENCLATURE_DATA_URL = "assets/moon-features.json";
+let moonNomenclatureDataPromise = null;
+let moonNomenclatureFeaturesCache = null;
 
 function moonCrater(name, lat, lon, radiusDeg, origin, clue) {
   return {
@@ -1507,7 +1751,7 @@ async function analyzeSelection() {
     return;
   }
 
-  const selection = getSelectionSummary();
+  const selection = await getSelectionSummary();
   if (!selection) return;
 
   setLoading(true, "AI 전문가가 지도를 읽고 있어요...");
@@ -1563,10 +1807,11 @@ async function analyzeSelection() {
   }
 }
 
-function getSelectionSummary() {
+async function getSelectionSummary() {
   const body = bodies[state.bodyKey];
   let geo;
   let areaDescription;
+  let selectionRadiusDeg = 0;
 
   if (state.viewMode === "sphere") {
     const sphereSummary = getSphereStrokeSummary();
@@ -1575,6 +1820,7 @@ function getSelectionSummary() {
       return null;
     }
     geo = sphereSummary.geo;
+    selectionRadiusDeg = sphereSummary.radiusDeg;
     areaDescription = `구형 보기에서 표시한 표면 영역, 중심 기준 반지름 약 ${sphereSummary.radiusDeg.toFixed(1)}도`;
   } else {
     const bounds = getStrokeBounds();
@@ -1619,11 +1865,12 @@ function getSelectionSummary() {
     geo = uvToGeo(u, v);
     const widthDeg = ((bounds.maxX - bounds.minX) / imageRect.width) * 360;
     const heightDeg = ((bounds.maxY - bounds.minY) / imageRect.height) * 180;
+    selectionRadiusDeg = getFlatSelectionRadiusDeg(bounds, imageRect, geo);
     areaDescription = `대략 경도 폭 ${widthDeg.toFixed(1)}도, 위도 폭 ${heightDeg.toFixed(1)}도`;
   }
 
-  const marsReference = body.key === "mars" ? getMarsReferenceContext(geo) : null;
-  const moonReference = body.key === "moon" ? getMoonReferenceContext(geo) : null;
+  const marsReference = body.key === "mars" ? await getMarsReferenceContext(geo, selectionRadiusDeg) : null;
+  const moonReference = body.key === "moon" ? await getMoonReferenceContext(geo, selectionRadiusDeg) : null;
   const referenceText = marsReference?.displayText || moonReference?.displayText || "";
   const referenceDescription = referenceText ? ` ${referenceText}` : "";
 
@@ -1633,9 +1880,25 @@ function getSelectionSummary() {
     description: `${body.name} 좌표: 위도 ${formatLat(geo.lat)}, 경도 ${formatLon(geo.lon)}. ${areaDescription}.${referenceDescription}`,
     lat: geo.lat,
     lon: geo.lon,
+    radiusDeg: selectionRadiusDeg,
     marsReference,
     moonReference,
   };
+}
+
+function getFlatSelectionRadiusDeg(bounds, imageRect, geo) {
+  const corners = [
+    { x: bounds.minX, y: bounds.minY },
+    { x: bounds.maxX, y: bounds.minY },
+    { x: bounds.maxX, y: bounds.maxY },
+    { x: bounds.minX, y: bounds.maxY },
+  ];
+  return corners.reduce((maxDistance, corner) => {
+    const u = clamp((corner.x - imageRect.x) / imageRect.width, 0, 1);
+    const v = clamp((corner.y - imageRect.y) / imageRect.height, 0, 1);
+    const cornerGeo = uvToGeo(u, v);
+    return Math.max(maxDistance, angularDistanceDeg(geo.lat, geo.lon, cornerGeo.lat, cornerGeo.lon));
+  }, 0);
 }
 
 function getSphereStrokeSummary() {
@@ -1676,54 +1939,458 @@ function getSphereStrokeSummary() {
   };
 }
 
-function getMarsReferenceContext(geo) {
-  const ranked = getMarsReferenceFeatures().map((feature) => ({
-    ...feature,
-    distanceDeg: angularDistanceDeg(geo.lat, geo.lon, feature.lat, feature.lon),
-  })).sort((a, b) => a.distanceDeg - b.distanceDeg);
+async function getMarsReferenceContext(geo, selectionRadiusDeg = 0) {
+  const loadedFeatures = await loadMarsNomenclatureFeatures();
+  const referenceFeatures = getMarsReferenceFeatures(loadedFeatures);
+  const effectiveSelectionRadius = Math.max(selectionRadiusDeg || 0, 0.8);
+  const ranked = referenceFeatures.map((feature) => {
+    const distanceDeg = angularDistanceDeg(geo.lat, geo.lon, feature.lat, feature.lon);
+    const category = getMarsFeatureCategory(feature);
+    const priorityScore = getMarsFeaturePriorityScore(feature);
+    const centerInSelection = distanceDeg <= effectiveSelectionRadius;
+    const selectionOverlapsFeature = distanceDeg <= effectiveSelectionRadius + (feature.radiusDeg || 0);
+    const pointInsideFeature = distanceDeg <= (feature.radiusDeg || 0);
+    return {
+      ...feature,
+      category,
+      priorityScore,
+      distanceDeg,
+      centerInSelection,
+      selectionOverlapsFeature,
+      pointInsideFeature,
+    };
+  }).sort((a, b) => a.distanceDeg - b.distanceDeg);
 
-  const likely = ranked.filter((feature) => feature.distanceDeg <= feature.radiusDeg).slice(0, 5);
-  const nearby = ranked.slice(0, 8);
-  const displayList = (likely.length ? likely : nearby.slice(0, 3))
-    .map((feature) => `${feature.name}(${feature.kind}) ${feature.distanceDeg.toFixed(1)}도 거리`)
-    .join(", ");
+  const majorContext = ranked
+    .filter((feature) => isMarsMajorContextFeature(feature) && feature.selectionOverlapsFeature)
+    .sort(compareMarsContextFeatures)
+    .slice(0, 8);
+  const majorContextKeys = new Set(majorContext.map((feature) => normalizeMarsFeatureKey(feature.name)));
+  const detailed = ranked
+    .filter((feature) => !majorContextKeys.has(normalizeMarsFeatureKey(feature.name)))
+    .filter((feature) => isMarsDetailedSelectionFeature(feature, effectiveSelectionRadius))
+    .sort(compareMarsDetailedFeatures)
+    .slice(0, 18);
+  const likely = ranked
+    .filter((feature) => feature.pointInsideFeature)
+    .sort(compareMarsLikelyFeatures)
+    .slice(0, 7);
+  const nearby = ranked.slice(0, 12);
+  const displayList = buildMarsDisplayList(majorContext, detailed, likely, nearby);
 
   return {
     likely,
     nearby,
-    displayText: `MOLA/IAU 기준 가까운 지형 후보: ${displayList}.`,
-    promptText: buildMarsReferencePrompt(likely, nearby),
+    majorContext,
+    detailed,
+    loadedCount: loadedFeatures.length,
+    referenceCount: referenceFeatures.length,
+    selectionRadiusDeg: effectiveSelectionRadius,
+    displayText: `MOLA/IAU 기준 지형 후보: ${displayList}.`,
+    promptText: buildMarsReferencePrompt({
+      likely,
+      nearby,
+      majorContext,
+      detailed,
+      loadedCount: loadedFeatures.length,
+      referenceCount: referenceFeatures.length,
+      selectionRadiusDeg: effectiveSelectionRadius,
+    }),
   };
 }
 
-function getMarsReferenceFeatures() {
+async function loadMarsNomenclatureFeatures() {
+  if (marsNomenclatureFeaturesCache) return marsNomenclatureFeaturesCache;
+  if (!marsNomenclatureDataPromise) {
+    marsNomenclatureDataPromise = fetch(MARS_NOMENCLATURE_DATA_URL, { cache: "force-cache" })
+      .then((response) => {
+        if (!response.ok) throw new Error(`HTTP ${response.status}`);
+        return response.json();
+      })
+      .then(normalizeMarsNomenclatureDataset)
+      .catch((error) => {
+        console.warn(`화성 전체 명명 지형 JSON을 불러오지 못해 내장 후보를 사용합니다: ${error.message}`);
+        return [];
+      });
+  }
+  marsNomenclatureFeaturesCache = await marsNomenclatureDataPromise;
+  return marsNomenclatureFeaturesCache;
+}
+
+function normalizeMarsNomenclatureDataset(data) {
+  const rawFeatures = Array.isArray(data) ? data : data?.features;
+  if (!Array.isArray(rawFeatures)) return [];
+
+  return rawFeatures.map(normalizeMarsNomenclatureFeature).filter(Boolean);
+}
+
+function normalizeMarsNomenclatureFeature(feature) {
+  const name = String(feature.name || feature.clean_name || "").trim();
+  const lat = Number(feature.lat ?? feature.centerLat ?? feature.center_lat);
+  const sourceLon = Number(feature.lon ?? feature.centerLon ?? feature.center_lon);
+  if (!name || !Number.isFinite(lat) || !Number.isFinite(sourceLon)) return null;
+
+  const lon = normalizeLon(sourceLon);
+  const diameterKm = Number(feature.diameterKm ?? feature.diameter ?? feature.diameter_km) || 0;
+  const radiusDeg = Number(feature.radiusDeg ?? estimateMarsFeatureRadiusDeg(feature, diameterKm)) || 1.2;
+  const type = String(feature.type || "");
+  const category = canonicalMarsFeatureCategory(
+    feature.category || inferMarsFeatureCategory(name, type, feature.kind),
+    feature.typeCode || feature.code,
+    name,
+    type,
+    feature.kind,
+  );
+  const kind = feature.kindKo || getMarsKindFromCategory(category, type || feature.kind);
+  const priorityTier = Number(feature.priorityTier ?? feature.priority_tier ?? 4);
+  const priorityScore = Number(feature.priorityScore ?? feature.priority_score ?? 0);
+
+  return {
+    id: feature.id || feature.featureId || name,
+    name,
+    kind,
+    category,
+    type,
+    typeCode: feature.typeCode || feature.code || "",
+    lat,
+    lon,
+    radiusDeg,
+    diameterKm,
+    quad: feature.quad || feature.quadName || feature.quad_name || "",
+    origin: feature.origin || "",
+    link: feature.link || "",
+    priorityTier,
+    priorityScore,
+    isMajor: Boolean(feature.isMajor || feature.is_major || priorityTier <= 2),
+    clue: feature.clue || buildMarsGazetteerClue(category, diameterKm, feature.quad || feature.quadName || feature.quad_name || ""),
+  };
+}
+
+function normalizeLon(lon) {
+  if (!Number.isFinite(lon)) return 0;
+  return ((lon + 540) % 360) - 180;
+}
+
+function estimateMarsFeatureRadiusDeg(feature, diameterKm) {
+  const category = feature.category || inferMarsFeatureCategory(feature.name, feature.type, feature.kind);
+  if (!diameterKm) return category === "crater" ? 1.2 : 2.5;
+  let radiusDeg = diameterKm / 150;
+  if (["terra", "planitia", "planum", "vastitas"].includes(category)) radiusDeg = diameterKm / 160;
+  if (["patera", "tholus", "crater", "labes"].includes(category)) radiusDeg = diameterKm / 135;
+  const max = ["terra", "planitia", "planum", "vastitas"].includes(category) ? 24 : 16;
+  const min = ["patera", "tholus", "crater", "labes"].includes(category) ? 1.2 : 2.2;
+  return Math.round(clamp(radiusDeg, min, max) * 10) / 10;
+}
+
+function getMarsReferenceFeatures(extraFeatures = []) {
   const merged = new Map();
-  MARS_FEATURE_REFERENCES.forEach((feature) => merged.set(normalizeMarsFeatureKey(feature.name), feature));
-  MARS_OFFICIAL_FEATURE_REFERENCES.forEach((feature) => merged.set(normalizeMarsFeatureKey(feature.name), feature));
+  const addFeature = (feature) => {
+    const key = normalizeMarsFeatureKey(feature.name);
+    const previous = merged.get(key);
+    merged.set(key, previous ? mergeMarsFeatureRecords(previous, feature) : feature);
+  };
+  extraFeatures.forEach(addFeature);
+  MARS_FEATURE_REFERENCES.forEach(addFeature);
+  MARS_OFFICIAL_FEATURE_REFERENCES.forEach(addFeature);
+  MARS_DETAILED_FEATURE_REFERENCES.forEach(addFeature);
   return Array.from(merged.values());
+}
+
+function mergeMarsFeatureRecords(previous, next) {
+  return {
+    ...previous,
+    ...next,
+    category: next.category || previous.category,
+    type: next.type || previous.type,
+    typeCode: next.typeCode || previous.typeCode,
+    diameterKm: next.diameterKm || previous.diameterKm,
+    radiusDeg: next.radiusDeg || previous.radiusDeg,
+    quad: next.quad || previous.quad,
+    link: next.link || previous.link,
+    priorityTier: Math.min(next.priorityTier ?? 4, previous.priorityTier ?? 4),
+    priorityScore: Math.max(next.priorityScore || 0, previous.priorityScore || 0),
+    isMajor: Boolean(next.isMajor || previous.isMajor),
+    clue: next.clue || previous.clue,
+    origin: next.origin || previous.origin,
+  };
 }
 
 function normalizeMarsFeatureKey(name) {
   return name.replace(/\s+Crater$/i, "").trim();
 }
 
-function buildMarsReferencePrompt(likely, nearby) {
+function getMarsFeatureCategory(feature) {
+  return canonicalMarsFeatureCategory(
+    feature.category,
+    feature.typeCode || feature.code,
+    feature.name,
+    feature.type,
+    feature.kind,
+  );
+}
+
+function canonicalMarsFeatureCategory(category = "", code = "", name = "", type = "", kind = "") {
+  const codeMap = {
+    AA: "crater",
+    AL: "albedo",
+    CA: "catena",
+    CB: "cavus",
+    CH: "chaos",
+    CM: "chasma",
+    CO: "collis",
+    DO: "dorsum",
+    FL: "fluctus",
+    FO: "fossa",
+    LA: "labes",
+    LB: "labyrinthus",
+    LN: "lingula",
+    MA: "macula",
+    MN: "mensa",
+    MO: "mons",
+    PA: "palus",
+    PE: "patera",
+    PL: "planitia",
+    PM: "planum",
+    RU: "rupes",
+    SC: "scopulus",
+    SE: "serpens",
+    SU: "sulcus",
+    TA: "terra",
+    TH: "tholus",
+    UN: "unda",
+    VA: "vallis",
+    VS: "vastitas",
+  };
+  const canonicalByCode = codeMap[String(code || "").toUpperCase()];
+  if (canonicalByCode) return canonicalByCode;
+
+  const normalized = String(category || "").trim().toLowerCase();
+  const broadMap = {
+    chain: "catena",
+    depression: "cavus",
+    "chaotic terrain": "chaos",
+    canyon: "chasma",
+    hill: "collis",
+    ridge: "dorsum",
+    flow: "fluctus",
+    trough: "fossa",
+    landslide: "labes",
+    maze: "labyrinthus",
+    tongue: "lingula",
+    "dark spot": "macula",
+    mesa: "mensa",
+    mountain: "mons",
+    plain: "planitia",
+    plateau: "planum",
+    "volcanic crater": "patera",
+    scarp: "rupes",
+    "sinuous feature": "serpens",
+    groove: "sulcus",
+    land: "terra",
+    dome: "tholus",
+    "dune field": "unda",
+    valley: "vallis",
+  };
+  if (broadMap[normalized]) return broadMap[normalized];
+  if (normalized) return normalized;
+  return inferMarsFeatureCategory(name, type, kind);
+}
+
+function inferMarsFeatureCategory(name = "", type = "", kind = "") {
+  const text = `${name} ${type} ${kind}`.toLowerCase();
+  if (text.includes("crater") || text.includes("충돌구")) return "crater";
+  if (text.includes("planitia")) return "planitia";
+  if (text.includes("planum") || text.includes("plana")) return "planum";
+  if (text.includes("terra")) return "terra";
+  if (text.includes("vastitas")) return "vastitas";
+  if (text.includes("vall")) return "vallis";
+  if (text.includes("chasma")) return "chasma";
+  if (text.includes("fossa")) return "fossa";
+  if (text.includes("chaos")) return "chaos";
+  if (text.includes("labyrinthus")) return "labyrinthus";
+  if (text.includes("mensa")) return "mensa";
+  if (text.includes("mons") || text.includes("montes")) return "mons";
+  if (text.includes("patera")) return "patera";
+  if (text.includes("tholus") || text.includes("tholi")) return "tholus";
+  if (text.includes("dors")) return "dorsum";
+  if (text.includes("rupes") || text.includes("rupēs")) return "rupes";
+  if (text.includes("scopul")) return "scopulus";
+  if (text.includes("cav")) return "cavus";
+  if (text.includes("coll")) return "collis";
+  if (text.includes("catena")) return "catena";
+  if (text.includes("sulc")) return "sulcus";
+  if (text.includes("unda")) return "unda";
+  if (text.includes("palus")) return "palus";
+  if (text.includes("lingula")) return "lingula";
+  if (text.includes("fluctus") || text.includes("fluctūs")) return "fluctus";
+  if (text.includes("serpens")) return "serpens";
+  if (text.includes("labes") || text.includes("labēs")) return "labes";
+  return "other";
+}
+
+function getMarsKindFromCategory(category, type = "") {
+  const kindByCategory = {
+    crater: "충돌구",
+    planitia: "저지 평원",
+    planum: "고원/평원",
+    terra: "고지대",
+    vastitas: "광대한 저지대",
+    vallis: "계곡/유출 수로",
+    chasma: "협곡",
+    fossa: "균열 지형",
+    chaos: "혼돈 지형",
+    labyrinthus: "미로 지형",
+    mensa: "평정산/대지 지형",
+    mons: "산/화산",
+    patera: "화산성 분화구",
+    tholus: "작은 화산",
+    dorsum: "능선",
+    rupes: "절벽/급경사면",
+    scopulus: "불규칙 절벽",
+    cavus: "불규칙 함몰지",
+    collis: "언덕 지형군",
+    catena: "크레이터 사슬",
+    sulcus: "홈·능선 지형",
+    unda: "사구 지형",
+    palus: "낮은 평원",
+    lingula: "혀 모양 극지 지형",
+    fluctus: "용암 흐름 지형",
+    serpens: "구불구불한 선형 지형",
+    labes: "산사태 퇴적 지형",
+  };
+  return kindByCategory[category] || type || "공식 명명 지형";
+}
+
+function getMarsFeaturePriorityScore(feature) {
+  const category = getMarsFeatureCategory(feature);
+  const categoryWeight = {
+    vastitas: 90,
+    terra: 86,
+    planitia: 84,
+    planum: 80,
+    vallis: 74,
+    chasma: 72,
+    fossa: 68,
+    chaos: 64,
+    mons: 62,
+    mensa: 58,
+    patera: 54,
+    tholus: 50,
+    crater: 44,
+  }[category] || 32;
+  const diameterWeight = Math.min(90, Math.sqrt(Math.max(feature.diameterKm || 0, 0)) * 3);
+  const tierWeight = Math.max(0, 5 - (feature.priorityTier || 4)) * 35;
+  const majorWeight = feature.isMajor ? 55 : 0;
+  return Math.round(Math.max(feature.priorityScore || 0, categoryWeight + diameterWeight + tierWeight + majorWeight));
+}
+
+function isMarsMajorContextFeature(feature) {
+  const category = getMarsFeatureCategory(feature);
+  const diameterKm = feature.diameterKm || 0;
+  if (["vastitas", "terra", "planitia", "planum"].includes(category)) return true;
+  if (diameterKm >= 700 && ["vallis", "chasma", "fossa", "chaos", "labyrinthus", "mons", "mensa"].includes(category)) return true;
+  if ((feature.isMajor || (feature.priorityTier || 4) <= 2) && category !== "crater" && diameterKm >= 250) return true;
+  return category === "crater" && diameterKm >= 300;
+}
+
+function isMarsDetailedSelectionFeature(feature, selectionRadiusDeg) {
+  if (feature.centerInSelection) return true;
+  if (feature.pointInsideFeature && (feature.radiusDeg || 0) <= Math.max(5, selectionRadiusDeg * 1.5)) return true;
+  return feature.selectionOverlapsFeature && (feature.diameterKm || 0) >= 80 && (feature.radiusDeg || 0) <= Math.max(8, selectionRadiusDeg + 2);
+}
+
+function compareMarsContextFeatures(a, b) {
+  return getMarsContextFitScore(b) - getMarsContextFitScore(a)
+    || (b.diameterKm || 0) - (a.diameterKm || 0)
+    || a.distanceDeg - b.distanceDeg;
+}
+
+function getMarsContextFitScore(feature) {
+  const category = getMarsFeatureCategory(feature);
+  const radiusDeg = Math.max(feature.radiusDeg || 1, 1);
+  const normalizedDistance = feature.distanceDeg / radiusDeg;
+  const overlapWeight = feature.pointInsideFeature ? 80 : feature.selectionOverlapsFeature ? 40 : 0;
+  const centerWeight = feature.centerInSelection ? 55 : 0;
+  const priorityWeight = Math.min(260, feature.priorityScore || 0) * 0.45;
+  const sizeWeight = Math.min(70, Math.sqrt(Math.max(feature.diameterKm || 0, 0)) * 2);
+  const categoryWeight = {
+    vastitas: 30,
+    terra: 28,
+    planitia: 28,
+    planum: 26,
+    mons: 24,
+    vallis: 24,
+    chasma: 22,
+    fossa: 20,
+    chaos: 18,
+    labyrinthus: 18,
+    mensa: 14,
+    patera: 8,
+    tholus: 8,
+    crater: 6,
+    rupes: -10,
+    scopulus: -10,
+    catena: -8,
+    dorsum: -8,
+  }[category] || 0;
+  return overlapWeight + centerWeight + priorityWeight + sizeWeight + categoryWeight
+    - (normalizedDistance * 70)
+    - (feature.distanceDeg * 1.2);
+}
+
+function compareMarsDetailedFeatures(a, b) {
+  return Number(b.centerInSelection) - Number(a.centerInSelection)
+    || (b.priorityScore || 0) - (a.priorityScore || 0)
+    || a.distanceDeg - b.distanceDeg;
+}
+
+function compareMarsLikelyFeatures(a, b) {
+  return (b.priorityScore || 0) - (a.priorityScore || 0)
+    || a.distanceDeg - b.distanceDeg;
+}
+
+function buildMarsDisplayList(majorContext, detailed, likely, nearby) {
+  const majorText = majorContext.slice(0, 3).map(formatMarsFeatureShortLine).join(", ");
+  const detailedText = detailed.slice(0, 5).map(formatMarsFeatureShortLine).join(", ");
+  if (majorText && detailedText) return `큰 지형: ${majorText}. 선택 범위 세부 후보: ${detailedText}`;
+  if (majorText) return `큰 지형: ${majorText}`;
+  const fallback = (likely.length ? likely : nearby.slice(0, 4)).map(formatMarsFeatureShortLine).join(", ");
+  return fallback || "가까운 공식 지형 후보 없음";
+}
+
+function formatMarsFeatureShortLine(feature) {
+  return `${feature.name}(${feature.kind}) ${feature.distanceDeg.toFixed(1)}도`;
+}
+
+function buildMarsReferencePrompt({ likely, nearby, majorContext, detailed, loadedCount, referenceCount, selectionRadiusDeg }) {
   const likelyLines = likely.length
     ? likely.map(formatMarsFeatureLine)
     : ["표시 좌표가 주요 기준 지형의 중심/대표 범위 안에 명확히 들어오지 않습니다."];
   const nearbyLines = nearby.map(formatMarsFeatureLine);
+  const majorLines = majorContext.length
+    ? majorContext.map(formatMarsFeatureLine)
+    : ["선택 범위와 확실히 겹치는 큰 공식 지형 후보가 뚜렷하지 않습니다."];
+  const detailedLines = detailed.length
+    ? detailed.map(formatMarsFeatureLine)
+    : ["선택 범위 안에 중심이 들어오거나 겹치는 세부 공식 지형 후보가 뚜렷하지 않습니다."];
 
   return [
     "화성 지형명 검증용 기준:",
     `참고 기준: ${MARS_REFERENCE_SOURCES.join("; ")}.`,
+    `전체 화성 명명 지형 JSON 로드 수: ${loadedCount}개, 중복 제거 후 참고 후보 수: ${referenceCount}개, 선택 반경: 약 ${selectionRadiusDeg.toFixed(1)}도.`,
     "아래 좌표 후보와 첨부 이미지의 실제 모양, 색, 밝기, 고도, 원형 분지, 협곡 방향, 화산 윤곽을 함께 비교하세요.",
     "가까운 후보에 없는 유명 지형명은 말하지 마세요.",
-    "표시점과 후보 중심의 거리, 후보별 매칭 반경, 실제 모양이 모두 맞을 때만 '~ 부근으로 추정'이라고 말하세요.",
+    "큰 지형 후보가 선택 범위와 겹치면 먼저 '어느 평원/고지/협곡계 안 또는 가장자리인지'를 설명하고, 그 다음 세부 후보를 연결하세요.",
+    "세부 후보는 '어느 큰 지형 안의 어떤 충돌구/계곡/균열/화산 후보'처럼 계층적으로 설명하세요.",
+    "표시점과 후보 중심의 거리, 후보별 매칭 반경, 선택 반경, 실제 모양이 모두 맞을 때만 '~ 부근으로 추정'이라고 말하세요.",
     "맞지 않으면 지형명 대신 '정확한 지명은 단정하기 어렵다'고 말하고, 보이는 지형 유형만 설명하세요.",
     "공식 지형명 후보가 맞으면 공식 영문명, 쉬운 한글 표기, 이름이 붙은 이유(고전 알베도 지형명인지, 인물/지명/탐사 임무를 기린 이름인지)를 짧게 풀어 설명하세요.",
     "중간 또는 어려움 단계라면 공식 지형명 후보의 대략적 크기(직경/폭/길이/높이 중 알맞은 것)와 실제 착륙지·과거 착륙 후보지·탐사선 주요 탐사 대상 여부를 확실한 범위에서 함께 설명하세요.",
     "착륙 후보지나 탐사선 관련 여부가 확실하지 않으면 말하지 말고, 확인되는 대표 기록만 말하세요.",
-    "가까운 후보가 여러 개라면 가장 가까운 1개를 중심으로 말하고, 모양이 애매하면 '후보'라고 분명히 표현하세요.",
+    "세부 후보가 많으면 종류별로 대표 3~5개만 말하고, 작은 충돌구나 좁은 계곡은 지도 해상도상 후보라고 분명히 표현하세요.",
+    "가까운 후보가 여러 개라면 큰 지형 1~2개와 세부 지형 1~3개를 중심으로 말하고, 모양이 애매하면 '후보'라고 분명히 표현하세요.",
+    `큰 지형/권역 후보: ${majorLines.join(" / ")}`,
+    `선택 범위 세부 후보: ${detailedLines.join(" / ")}`,
     `가까운 후보: ${likelyLines.join(" / ")}`,
     `주변 참고 지형: ${nearbyLines.join(" / ")}`,
   ].join("\n");
@@ -1732,54 +2399,482 @@ function buildMarsReferencePrompt(likely, nearby) {
 function formatMarsFeatureLine(feature) {
   const origin = feature.origin ? `, 이름 유래: ${feature.origin}` : "";
   const radius = feature.radiusDeg ? `, 매칭 반경 약 ${feature.radiusDeg.toFixed(1)}도` : "";
-  return `${feature.name} (${feature.kind}, 대표좌표 ${formatLat(feature.lat)} ${formatLon(feature.lon)}, 표시점과 ${feature.distanceDeg.toFixed(1)}도${radius}${origin}, 시각 단서: ${feature.clue})`;
+  const diameter = feature.diameterKm ? `, 크기 약 ${Math.round(feature.diameterKm).toLocaleString("en-US")} km` : "";
+  const selection = feature.centerInSelection ? ", 중심이 선택 범위 안" : feature.selectionOverlapsFeature ? ", 선택 범위와 겹침" : "";
+  const tier = feature.isMajor || feature.priorityTier ? `, 우선순위 ${feature.priorityTier || "주요"}` : "";
+  return `${feature.name} (${feature.kind}, 대표좌표 ${formatLat(feature.lat)} ${formatLon(feature.lon)}, 표시점과 ${feature.distanceDeg.toFixed(1)}도${radius}${diameter}${selection}${tier}${origin}, 시각 단서: ${feature.clue})`;
 }
 
-function getMoonReferenceContext(geo) {
-  const ranked = getMoonReferenceFeatures().map((feature) => ({
-    ...feature,
-    distanceDeg: angularDistanceDeg(geo.lat, geo.lon, feature.lat, feature.lon),
-  })).sort((a, b) => a.distanceDeg - b.distanceDeg);
+async function getMoonReferenceContext(geo, selectionRadiusDeg = 0) {
+  const loadedFeatures = await loadMoonNomenclatureFeatures();
+  const referenceFeatures = getMoonReferenceFeatures(loadedFeatures);
+  const effectiveSelectionRadius = Math.max(selectionRadiusDeg || 0, 0.6);
+  const ranked = referenceFeatures.map((feature) => {
+    const distanceDeg = angularDistanceDeg(geo.lat, geo.lon, feature.lat, feature.lon);
+    const category = getMoonFeatureCategory(feature);
+    const priorityScore = getMoonFeaturePriorityScore(feature);
+    const centerInSelection = distanceDeg <= effectiveSelectionRadius;
+    const selectionOverlapsFeature = distanceDeg <= effectiveSelectionRadius + (feature.radiusDeg || 0);
+    const pointInsideFeature = distanceDeg <= (feature.radiusDeg || 0);
+    return {
+      ...feature,
+      category,
+      priorityScore,
+      distanceDeg,
+      centerInSelection,
+      selectionOverlapsFeature,
+      pointInsideFeature,
+    };
+  }).sort((a, b) => a.distanceDeg - b.distanceDeg);
 
-  const likely = ranked.filter((feature) => feature.distanceDeg <= feature.radiusDeg).slice(0, 5);
-  const nearby = ranked.slice(0, 8);
-  const displayList = (likely.length ? likely : nearby.slice(0, 3))
-    .map((feature) => `${feature.name}(${feature.kind}) ${feature.distanceDeg.toFixed(1)}도 거리`)
-    .join(", ");
+  const majorContext = ranked
+    .filter((feature) => isMoonMajorContextFeature(feature) && feature.selectionOverlapsFeature)
+    .sort(compareMoonContextFeatures)
+    .slice(0, 8);
+  const majorContextKeys = new Set(majorContext.map((feature) => normalizeMoonFeatureKey(feature.name)));
+  const detailed = ranked
+    .filter((feature) => !majorContextKeys.has(normalizeMoonFeatureKey(feature.name)))
+    .filter((feature) => isMoonDetailedSelectionFeature(feature, effectiveSelectionRadius))
+    .sort(compareMoonDetailedFeatures)
+    .slice(0, 18);
+  const likely = ranked
+    .filter((feature) => feature.pointInsideFeature)
+    .filter((feature) => shouldShowMoonFineFeature(feature, effectiveSelectionRadius))
+    .sort(compareMoonLikelyFeatures)
+    .slice(0, 7);
+  const nearby = ranked
+    .filter((feature) => shouldShowMoonFineFeature(feature, effectiveSelectionRadius))
+    .slice(0, 12);
+  const displayList = buildMoonDisplayList(majorContext, detailed, likely, nearby);
 
   return {
     likely,
     nearby,
-    displayText: `IAU/USGS 기준 가까운 달 지형 후보: ${displayList}.`,
-    promptText: buildMoonReferencePrompt(likely, nearby),
+    majorContext,
+    detailed,
+    loadedCount: loadedFeatures.length,
+    referenceCount: referenceFeatures.length,
+    selectionRadiusDeg: effectiveSelectionRadius,
+    displayText: `LOLA/IAU 기준 달 지형 후보: ${displayList}.`,
+    promptText: buildMoonReferencePrompt({
+      likely,
+      nearby,
+      majorContext,
+      detailed,
+      loadedCount: loadedFeatures.length,
+      referenceCount: referenceFeatures.length,
+      selectionRadiusDeg: effectiveSelectionRadius,
+    }),
   };
 }
 
-function getMoonReferenceFeatures() {
+async function loadMoonNomenclatureFeatures() {
+  if (moonNomenclatureFeaturesCache) return moonNomenclatureFeaturesCache;
+  if (!moonNomenclatureDataPromise) {
+    moonNomenclatureDataPromise = fetch(MOON_NOMENCLATURE_DATA_URL, { cache: "force-cache" })
+      .then((response) => {
+        if (!response.ok) throw new Error(`HTTP ${response.status}`);
+        return response.json();
+      })
+      .then(normalizeMoonNomenclatureDataset)
+      .catch((error) => {
+        console.warn(`달 전체 명명 지형 JSON을 불러오지 못해 내장 후보를 사용합니다: ${error.message}`);
+        return [];
+      });
+  }
+  moonNomenclatureFeaturesCache = await moonNomenclatureDataPromise;
+  return moonNomenclatureFeaturesCache;
+}
+
+function normalizeMoonNomenclatureDataset(data) {
+  const rawFeatures = Array.isArray(data) ? data : data?.features;
+  if (!Array.isArray(rawFeatures)) return [];
+
+  return rawFeatures.map(normalizeMoonNomenclatureFeature).filter(Boolean);
+}
+
+function normalizeMoonNomenclatureFeature(feature) {
+  const name = String(feature.name || feature.clean_name || "").trim();
+  const lat = Number(feature.lat ?? feature.centerLat ?? feature.center_lat);
+  const sourceLon = Number(feature.lon ?? feature.centerLon ?? feature.center_lon);
+  if (!name || !Number.isFinite(lat) || !Number.isFinite(sourceLon)) return null;
+
+  const lon = normalizeLon(sourceLon);
+  const diameterKm = Number(feature.diameterKm ?? feature.diameter ?? feature.diameter_km) || 0;
+  const radiusDeg = Number(feature.radiusDeg ?? estimateMoonFeatureRadiusDeg(feature, diameterKm)) || 0.7;
+  const type = String(feature.type || "");
+  const category = canonicalMoonFeatureCategory(
+    feature.category || inferMoonFeatureCategory(name, type, feature.kind),
+    feature.typeCode || feature.code,
+    name,
+    type,
+    feature.kind,
+  );
+  const kind = feature.kindKo || getMoonKindFromCategory(category, type || feature.kind);
+  const priorityTier = Number(feature.priorityTier ?? feature.priority_tier ?? 4);
+  const priorityScore = Number(feature.priorityScore ?? feature.priority_score ?? 0);
+  const quad = feature.quad || feature.quadName || feature.quad_name || "";
+
+  return {
+    id: feature.id || feature.featureId || name,
+    name,
+    kind,
+    category,
+    type,
+    typeCode: feature.typeCode || feature.code || "",
+    lat,
+    lon,
+    radiusDeg,
+    diameterKm,
+    quad,
+    origin: feature.origin || "",
+    link: feature.link || "",
+    priorityTier,
+    priorityScore,
+    isMajor: Boolean(feature.isMajor || feature.is_major || priorityTier <= 2),
+    clue: feature.clue || buildMoonGazetteerClue(category, diameterKm, quad),
+  };
+}
+
+function estimateMoonFeatureRadiusDeg(feature, diameterKm) {
+  const category = canonicalMoonFeatureCategory(feature.category, feature.typeCode || feature.code, feature.name, feature.type, feature.kind);
+  if (!diameterKm) return ["mare", "oceanus", "lacus", "palus", "sinus"].includes(category) ? 3.5 : 0.9;
+  let radiusDeg = diameterKm / 60;
+  if (["mare", "oceanus", "lacus", "palus", "sinus"].includes(category)) radiusDeg = diameterKm / 70;
+  if (["rima", "vallis", "rupes", "dorsum", "catena"].includes(category)) radiusDeg = diameterKm / 75;
+  const max = ["mare", "oceanus"].includes(category) ? 28 : 18;
+  const min = category === "crater" ? 0.35 : 0.7;
+  return Math.round(clamp(radiusDeg, min, max) * 10) / 10;
+}
+
+function getMoonReferenceFeatures(extraFeatures = []) {
   const merged = new Map();
-  MOON_FEATURE_REFERENCES.forEach((feature) => merged.set(feature.name, feature));
-  MOON_CRATER_REFERENCES.forEach((feature) => merged.set(feature.name, feature));
+  const addFeature = (feature) => {
+    const key = normalizeMoonFeatureKey(feature.name);
+    const previous = merged.get(key);
+    merged.set(key, previous ? mergeMoonFeatureRecords(previous, feature) : feature);
+  };
+  extraFeatures.forEach(addFeature);
+  MOON_FEATURE_REFERENCES.forEach(addFeature);
+  MOON_CRATER_REFERENCES.forEach(addFeature);
   return Array.from(merged.values());
 }
 
-function buildMoonReferencePrompt(likely, nearby) {
+function mergeMoonFeatureRecords(previous, next) {
+  return {
+    ...previous,
+    ...next,
+    category: next.category || previous.category,
+    type: next.type || previous.type,
+    typeCode: next.typeCode || previous.typeCode,
+    diameterKm: next.diameterKm || previous.diameterKm,
+    radiusDeg: next.radiusDeg || previous.radiusDeg,
+    quad: next.quad || previous.quad,
+    link: next.link || previous.link,
+    priorityTier: Math.min(next.priorityTier ?? 4, previous.priorityTier ?? 4),
+    priorityScore: Math.max(next.priorityScore || 0, previous.priorityScore || 0),
+    isMajor: Boolean(next.isMajor || previous.isMajor),
+    clue: next.clue || previous.clue,
+    origin: next.origin || previous.origin,
+  };
+}
+
+function normalizeMoonFeatureKey(name) {
+  return String(name || "").trim().toLowerCase();
+}
+
+function getMoonFeatureCategory(feature) {
+  return canonicalMoonFeatureCategory(
+    feature.category,
+    feature.typeCode || feature.code,
+    feature.name,
+    feature.type,
+    feature.kind,
+  );
+}
+
+function canonicalMoonFeatureCategory(category = "", code = "", name = "", type = "", kind = "") {
+  const normalized = String(category || "").trim().toLowerCase();
+  const codeMap = {
+    AA: "crater",
+    AL: "albedo",
+    CA: "catena",
+    DO: "dorsum",
+    LC: "lacus",
+    LF: "astronaut_feature",
+    ME: "mare",
+    MO: "mons",
+    OC: "oceanus",
+    PA: "palus",
+    PL: "planitia",
+    PR: "promontorium",
+    MR: "mare",
+    RI: "rima",
+    RU: "rupes",
+    SF: "satellite_feature",
+    SI: "sinus",
+    ST: "statio",
+    VA: "vallis",
+  };
+  const canonicalByCode = codeMap[String(code || "").toUpperCase()];
+  if (canonicalByCode) return canonicalByCode;
+  const broadMap = {
+    chain: "catena",
+    ridge: "dorsum",
+    "astronaut-named feature": "astronaut_feature",
+    lake: "lacus",
+    sea: "mare",
+    ocean: "oceanus",
+    marsh: "palus",
+    bay: "sinus",
+    mountain: "mons",
+    mountains: "montes",
+    cape: "promontorium",
+    rille: "rima",
+    scarp: "rupes",
+    valley: "vallis",
+  };
+  if (broadMap[normalized]) return broadMap[normalized];
+  if (normalized && normalized !== "other") return normalized;
+  return inferMoonFeatureCategory(name, type, kind);
+}
+
+function inferMoonFeatureCategory(name = "", type = "", kind = "") {
+  const text = `${name} ${type} ${kind}`.toLowerCase();
+  if (text.includes("satellite feature")) return "satellite_feature";
+  if (text.includes("statio")) return "statio";
+  if (text.includes("landing") || text.includes("astronaut")) return "astronaut_feature";
+  if (text.includes("oceanus")) return "oceanus";
+  if (text.includes("mare") || text.includes("maria")) return "mare";
+  if (text.includes("lacus")) return "lacus";
+  if (text.includes("palus")) return "palus";
+  if (text.includes("sinus")) return "sinus";
+  if (text.includes("montes")) return "montes";
+  if (text.includes("mons")) return "mons";
+  if (text.includes("promontorium")) return "promontorium";
+  if (text.includes("vall")) return "vallis";
+  if (text.includes("rima")) return "rima";
+  if (text.includes("rupes")) return "rupes";
+  if (text.includes("dors")) return "dorsum";
+  if (text.includes("catena")) return "catena";
+  if (text.includes("planitia")) return "planitia";
+  if (text.includes("crater") || text.includes("충돌구")) return "crater";
+  return "other";
+}
+
+function getMoonKindFromCategory(category, type = "") {
+  const kindByCategory = {
+    crater: "충돌구",
+    mare: "달의 바다/현무암 평원",
+    oceanus: "달의 대양/현무암 평원",
+    lacus: "달의 호수 모양 평원",
+    palus: "달의 늪 모양 평원",
+    sinus: "달의 만 모양 평원",
+    mons: "산",
+    montes: "산맥",
+    promontorium: "곶/산악 돌출부",
+    vallis: "계곡",
+    rima: "열구/릴",
+    rupes: "절벽/단층애",
+    dorsum: "해령/능선",
+    catena: "크레이터 사슬",
+    statio: "착륙 지점",
+    astronaut_feature: "우주비행사 관련 지형",
+    satellite_feature: "부속 크레이터",
+    planitia: "평원",
+    albedo: "밝기 지형",
+  };
+  return kindByCategory[category] || type || "공식 명명 지형";
+}
+
+function buildMoonGazetteerClue(category, diameterKm, quad) {
+  const quadText = typeof quad === "string" ? quad : quad?.name || quad?.code || "";
+  const sizeText = diameterKm ? `약 ${Math.round(diameterKm).toLocaleString("en-US")} km 규모` : "공식 중심 좌표 기준";
+  const whereText = quadText ? `${quadText} 권역의 ` : "";
+  const clueByCategory = {
+    crater: "원형 테두리, 중앙봉, 바닥 밝기, 광조 유무를 함께 확인",
+    mare: "어둡고 비교적 매끈한 현무암 평원으로 보이는지 확인",
+    oceanus: "매우 넓은 어두운 현무암 평원으로 보이는지 확인",
+    lacus: "작은 어두운 평원 조각인지 확인",
+    palus: "낮고 어두운 평원 지대인지 확인",
+    sinus: "큰 바다 가장자리의 만처럼 휘어진 어두운 평원인지 확인",
+    mons: "주변보다 밝거나 높은 산체와 그림자를 확인",
+    montes: "선형으로 이어진 산맥과 주변 바다 경계를 확인",
+    promontorium: "바다 평원 가장자리로 돌출된 산악 지형인지 확인",
+    vallis: "길게 파인 계곡 또는 선형 저지대인지 확인",
+    rima: "가늘고 긴 열구나 굽은 릴 무늬인지 확인",
+    rupes: "긴 절벽 또는 단층애의 밝기/그림자 경계를 확인",
+    dorsum: "바다 위 낮은 능선처럼 이어지는 선형 굴곡인지 확인",
+    catena: "작은 충돌구들이 줄지어 보이는지 확인",
+    statio: "탐사선 착륙 지점 주변의 작은 지명인지 확인",
+    astronaut_feature: "아폴로 탐사와 관련된 작은 현장 지명인지 확인",
+    satellite_feature: "부모 크레이터 주변의 문자붙은 작은 부속 크레이터인지 확인",
+    planitia: "비교적 평탄한 밝기/고도 무늬가 이어지는지 확인",
+    albedo: "밝고 어두운 무늬 차이로 구분되는지 확인",
+  };
+  return `${whereText}${sizeText}. ${clueByCategory[category] || "색, 밝기, 고도, 윤곽을 함께 확인"}`;
+}
+
+function getMoonFeaturePriorityScore(feature) {
+  const category = getMoonFeatureCategory(feature);
+  const categoryWeight = {
+    oceanus: 94,
+    mare: 90,
+    sinus: 82,
+    lacus: 78,
+    palus: 76,
+    montes: 72,
+    mons: 68,
+    vallis: 64,
+    rima: 62,
+    rupes: 60,
+    dorsum: 58,
+    catena: 52,
+    promontorium: 50,
+    crater: 46,
+    statio: 92,
+    astronaut_feature: 70,
+    planitia: 58,
+    albedo: 40,
+    satellite_feature: 5,
+  }[category] || 32;
+  const diameterWeight = Math.min(90, Math.sqrt(Math.max(feature.diameterKm || 0, 0)) * 4);
+  const tierWeight = Math.max(0, 5 - (feature.priorityTier || 4)) * 35;
+  const majorWeight = feature.isMajor ? 55 : 0;
+  return Math.round(Math.max(feature.priorityScore || 0, categoryWeight + diameterWeight + tierWeight + majorWeight));
+}
+
+function isMoonMajorContextFeature(feature) {
+  const category = getMoonFeatureCategory(feature);
+  const diameterKm = feature.diameterKm || 0;
+  if (["oceanus", "mare", "lacus", "palus", "sinus"].includes(category)) return true;
+  if (["montes", "mons"].includes(category) && (diameterKm >= 80 || feature.isMajor)) return true;
+  if (["vallis", "rima", "rupes", "dorsum", "catena"].includes(category) && diameterKm >= 120) return true;
+  if ((feature.isMajor || (feature.priorityTier || 4) <= 2) && category !== "crater" && diameterKm >= 60) return true;
+  return category === "crater" && diameterKm >= 150;
+}
+
+function isMoonDetailedSelectionFeature(feature, selectionRadiusDeg) {
+  if (!shouldShowMoonFineFeature(feature, selectionRadiusDeg)) return false;
+  if (feature.centerInSelection) return true;
+  if (feature.pointInsideFeature && (feature.radiusDeg || 0) <= Math.max(4, selectionRadiusDeg * 1.5)) return true;
+  return feature.selectionOverlapsFeature && (feature.diameterKm || 0) >= 15 && (feature.radiusDeg || 0) <= Math.max(7, selectionRadiusDeg + 2);
+}
+
+function shouldShowMoonFineFeature(feature, selectionRadiusDeg) {
+  const category = getMoonFeatureCategory(feature);
+  if (category !== "satellite_feature") return true;
+  return selectionRadiusDeg <= 1.2 && feature.distanceDeg <= Math.max(feature.radiusDeg || 0, 0.35);
+}
+
+function compareMoonContextFeatures(a, b) {
+  return getMoonContextFitScore(b) - getMoonContextFitScore(a)
+    || (b.diameterKm || 0) - (a.diameterKm || 0)
+    || a.distanceDeg - b.distanceDeg;
+}
+
+function getMoonContextFitScore(feature) {
+  const category = getMoonFeatureCategory(feature);
+  const radiusDeg = Math.max(feature.radiusDeg || 1, 1);
+  const normalizedDistance = feature.distanceDeg / radiusDeg;
+  const overlapWeight = feature.pointInsideFeature ? 80 : feature.selectionOverlapsFeature ? 40 : 0;
+  const centerWeight = feature.centerInSelection ? 55 : 0;
+  const priorityWeight = Math.min(260, feature.priorityScore || 0) * 0.45;
+  const sizeWeight = Math.min(70, Math.sqrt(Math.max(feature.diameterKm || 0, 0)) * 3);
+  const categoryWeight = {
+    oceanus: 34,
+    mare: 32,
+    sinus: 28,
+    lacus: 24,
+    palus: 22,
+    montes: 22,
+    mons: 18,
+    vallis: 18,
+    rima: 14,
+    rupes: 12,
+    dorsum: 10,
+    crater: 5,
+  }[category] || 0;
+  return overlapWeight + centerWeight + priorityWeight + sizeWeight + categoryWeight
+    - (normalizedDistance * 70)
+    - (feature.distanceDeg * 1.2);
+}
+
+function compareMoonDetailedFeatures(a, b) {
+  return Number(b.centerInSelection) - Number(a.centerInSelection)
+    || (b.priorityScore || 0) - (a.priorityScore || 0)
+    || a.distanceDeg - b.distanceDeg;
+}
+
+function compareMoonLikelyFeatures(a, b) {
+  return Number(b.centerInSelection) - Number(a.centerInSelection)
+    || getMoonLikelyFocusWeight(b) - getMoonLikelyFocusWeight(a)
+    || (b.priorityScore || 0) - (a.priorityScore || 0)
+    || a.distanceDeg - b.distanceDeg;
+}
+
+function getMoonLikelyFocusWeight(feature) {
+  const category = getMoonFeatureCategory(feature);
+  return {
+    statio: 45,
+    astronaut_feature: 42,
+    crater: 34,
+    rima: 24,
+    vallis: 22,
+    rupes: 20,
+    mons: 18,
+    montes: 18,
+    sinus: 12,
+    lacus: 12,
+    palus: 12,
+    mare: 8,
+    oceanus: 6,
+    satellite_feature: 4,
+  }[category] || 10;
+}
+
+function buildMoonDisplayList(majorContext, detailed, likely, nearby) {
+  const majorText = majorContext.slice(0, 3).map(formatMoonFeatureShortLine).join(", ");
+  const detailedText = detailed.slice(0, 5).map(formatMoonFeatureShortLine).join(", ");
+  if (majorText && detailedText) return `큰 지형 ${majorText}. 선택 범위 내부 후보: ${detailedText}`;
+  if (majorText) return `큰 지형 ${majorText}`;
+  const fallback = (likely.length ? likely : nearby.slice(0, 4)).map(formatMoonFeatureShortLine).join(", ");
+  return fallback || "가까운 공식 달 지형 후보 없음";
+}
+
+function formatMoonFeatureShortLine(feature) {
+  return `${feature.name}(${feature.kind}) ${feature.distanceDeg.toFixed(1)}도`;
+}
+
+function buildMoonReferencePrompt({ likely, nearby, majorContext, detailed, loadedCount, referenceCount, selectionRadiusDeg }) {
   const likelyLines = likely.length
     ? likely.map(formatMoonFeatureLine)
-    : ["표시 좌표가 대표 달 지형의 중심/대표 범위 안에 명확히 들어오지 않습니다."];
+    : ["표시 좌표가 공식 달 지형의 중심/대표 범위 안에 명확히 들어오지 않습니다."];
   const nearbyLines = nearby.map(formatMoonFeatureLine);
+  const majorLines = majorContext.length
+    ? majorContext.map(formatMoonFeatureLine)
+    : ["선택 범위와 확실히 겹치는 큰 달 지형 후보가 제한적입니다."];
+  const detailedLines = detailed.length
+    ? detailed.map(formatMoonFeatureLine)
+    : ["선택 범위 안에 중심이 들어오거나 겹치는 세부 공식 지형 후보가 제한적입니다."];
 
   return [
     "달 지형명 검증용 기준:",
     `참고 기준: ${MOON_REFERENCE_SOURCES.join("; ")}.`,
+    `전체 달 명명 지형 JSON 로드 수: ${loadedCount}개, 중복 제거 후 참고 후보 수: ${referenceCount}개, 선택 반경: 약 ${selectionRadiusDeg.toFixed(1)}도.`,
     "아래 좌표 후보와 첨부 이미지의 실제 색상, 밝기, 고도 무늬, 원형 테두리, 광조, 바닥 밝기를 함께 비교하세요.",
     "가까운 후보에 없는 유명 지형명은 말하지 마세요.",
-    "표시점과 후보 중심의 거리, 후보별 매칭 반경, 실제 모양이 모두 맞을 때만 '~ 부근으로 추정'이라고 말하세요.",
+    "큰 바다·대양·만·호수·산맥·긴 계곡/열구/절벽 후보가 선택 범위와 겹치면 먼저 어느 큰 지형 안쪽 또는 가장자리인지 설명하세요.",
+    "그 다음 세부 후보를 '어느 큰 지형 안의 어떤 충돌구/릴/계곡/산맥 후보'처럼 계층적으로 설명하세요.",
+    "표시점과 후보 중심의 거리, 후보별 매칭 반경, 선택 반경, 실제 모양이 모두 맞을 때만 '~ 부근으로 추정'이라고 말하세요.",
     "맞지 않으면 지형명 대신 '정확한 지명은 단정하기 어렵다'고 말하고, 보이는 지형 유형만 설명하세요.",
     "명명 크레이터가 맞는 후보라면 공식 영문명, 쉬운 한글 표기, 이름이 붙은 이유(누구/무엇을 기린 이름인지)를 어린이에게 짧게 풀어 설명하세요.",
-    "중간 또는 어려움 단계라면 공식 지형명 후보의 대략적 크기(직경/폭/길이/높이)와 과학적 지식 실제 착륙지·과거 착륙 후보지·탐사선 주요 탐사 대상 여부를 확실한 범위에서 함께 설명하세요.",
-    "착륙 후보지나 탐사선 관련 여부가 확실하지 않으면 말하지 말고, 확실한 기록이 있는것만 말해주세요.",
-    "가까운 후보가 여러 개라면 가장 가까운 1개를 중심으로 말하고, 모양이 애매하면 '후보'라고 분명히 표현하세요.",
+    "중간 또는 어려움 단계라면 공식 지형명 후보의 대략적 크기(직경/폭/길이/높이)와 과학적 지식, 실제 착륙지·과거 착륙 후보지·탐사선 주요 탐사 대상 여부를 확실한 범위에서 함께 설명하세요.",
+    "착륙 후보지나 탐사선 관련 여부가 확실하지 않으면 말하지 말고, 확실한 기록이 있는 것만 말해주세요.",
+    "가까운 후보가 여러 개라면 큰 지형 1~2개와 세부 지형 1~3개를 중심으로 말하고, 모양이 애매하면 '후보'라고 분명히 표현하세요.",
     "달의 '바다'는 액체 물의 바다가 아니라 오래전에 용암이 굳어 만들어진 어두운 현무암 평원이라는 내용을 포함해서 어린이에게 쉽게 설명하세요.",
+    `큰 지형/권역 후보: ${majorLines.join(" / ")}`,
+    `선택 범위 내부 세부 후보: ${detailedLines.join(" / ")}`,
     `가까운 후보: ${likelyLines.join(" / ")}`,
     `주변 참고 지형: ${nearbyLines.join(" / ")}`,
   ].join("\n");
@@ -1788,7 +2883,10 @@ function buildMoonReferencePrompt(likely, nearby) {
 function formatMoonFeatureLine(feature) {
   const origin = feature.origin ? `, 이름 유래: ${feature.origin}` : "";
   const radius = feature.radiusDeg ? `, 매칭 반경 약 ${feature.radiusDeg.toFixed(1)}도` : "";
-  return `${feature.name} (${feature.kind}, 대표좌표 ${formatLat(feature.lat)} ${formatLon(feature.lon)}, 표시점과 ${feature.distanceDeg.toFixed(1)}도${radius}${origin}, 시각 단서: ${feature.clue})`;
+  const diameter = feature.diameterKm ? `, 크기 약 ${Math.round(feature.diameterKm).toLocaleString("en-US")} km` : "";
+  const selection = feature.centerInSelection ? ", 중심이 선택 범위 안" : feature.selectionOverlapsFeature ? ", 선택 범위와 겹침" : "";
+  const tier = feature.isMajor || feature.priorityTier ? `, 우선순위 ${feature.priorityTier || "주요"}` : "";
+  return `${feature.name} (${feature.kind}, 대표좌표 ${formatLat(feature.lat)} ${formatLon(feature.lon)}, 표시점과 ${feature.distanceDeg.toFixed(1)}도${radius}${diameter}${selection}${tier}${origin}, 시각 단서: ${feature.clue})`;
 }
 
 function getStrokeBounds() {
