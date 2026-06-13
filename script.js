@@ -1045,6 +1045,33 @@ function setViewMode(mode, options = {}) {
   updateDrawButton();
   resizeCanvases();
   scheduleSphereRender();
+  syncExploreHistoryViewMode(mode, options);
+}
+
+function syncExploreHistoryViewMode(mode, options = {}) {
+  if (
+    options.updateHistory === false
+    || state.applyingHistory
+    || els.exploreScreen.classList.contains("hidden")
+    || !state.bodyKey
+  ) {
+    return;
+  }
+
+  const current = window.history.state;
+  if (current?.app !== APP_HISTORY_KEY || current.screen !== "explore" || current.modalId) {
+    return;
+  }
+
+  const nextState = createAppHistoryState({
+    screen: "explore",
+    bodyKey: state.bodyKey,
+    viewMode: mode,
+  });
+  if (areAppHistoryStatesEqual(current, nextState)) return;
+
+  window.history.replaceState(nextState, "", window.location.href);
+  state.currentHistoryState = nextState;
 }
 
 function toggleDrawMode() {
