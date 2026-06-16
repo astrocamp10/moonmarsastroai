@@ -1310,8 +1310,8 @@ function onPointerMove(event) {
   if (state.isRotating && state.viewMode === "sphere") {
     const dx = event.clientX - state.lastPointer.x;
     const dy = event.clientY - state.lastPointer.y;
-    state.rotation.lon = wrapRadians(state.rotation.lon + dx * 0.008);
-    state.rotation.lat = clamp(state.rotation.lat + dy * 0.006, -1.15, 1.15);
+    state.rotation.lon = wrapRadians(state.rotation.lon - dx * 0.008);
+    state.rotation.lat = clamp(state.rotation.lat - dy * 0.006, -1.15, 1.15);
     state.lastPointer = {
       x: event.clientX,
       y: event.clientY,
