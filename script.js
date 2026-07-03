@@ -52,10 +52,10 @@ const ANSWER_LEVELS = [
     label: "쉬움",
     badge: "초3",
     summary: "초등학교 3학년 수준",
-    description: "짧은 문장과 생활 속 비유로 설명해요.",
-    instruction: "답변 난이도는 쉬움입니다. 초등학교 3학년 학생이 읽는다고 생각하고, 짧고 쉬운 문장으로 설명하세요. 어려운 말은 꼭 쉬운 풀이를 붙이고, 생활 속 비유를 많이 사용하세요.",
-    responseDetail: "관찰 근거는 2가지 정도로 간단히 고르고, 핵심 과학 개념은 쉬운 말로 풀어 주세요.",
-    followupDetail: "과학적 근거와 관찰 포인트를 1~2가지 더해 주세요.",
+    description: "위치, 생긴 까닭, 보이는 모양만 아주 짧게 설명해요.",
+    instruction: "답변 난이도는 쉬움입니다. 초등학교 3학년 학생이 읽는다고 생각하고, 아주 짧고 쉬운 문장으로 설명하세요. 핵심만 말하고, 긴 과학 설명이나 여러 비유는 넣지 마세요.",
+    responseDetail: "관찰 근거는 눈에 보이는 단서 1~2가지만 고르고, 어려운 말은 쉬운 말로 바꿔 주세요.",
+    followupDetail: "질문에 바로 답하고, 관찰 포인트는 1가지만 짧게 더해 주세요.",
     audience: "초등학교 3학년 학생",
   },
   {
@@ -106,13 +106,35 @@ const SYSTEM_PROMPT = [
   "지도나 사진에서 확실하지 않은 지명은 단정하지 말고 '추정'이라고 말하세요.",
   "장난스럽거나 곤란하거나 과학 탐사와 무관한 질문은 짧게 방향을 바꾸고, 달과 화성 탐사 이야기로 부드럽게 돌려주세요.",
   "답변은 한국어로 작성하고, 설정된 학생 수준에 맞는 짧은 문단을 여러 개 사용하세요.",
-  "너무 짧게 끝내지 말고 관찰 근거, 지형이 만들어진 과정, 과학적으로 흥미로운 점을 함께 설명하세요.",
+  "쉬움 단계에서는 핵심만 아주 짧게 답하고, 중간 또는 어려움 단계에서는 관찰 근거, 지형이 만들어진 과정, 과학적으로 흥미로운 점을 함께 설명하세요.",
   "전문 용어는 '충돌구(우주 암석이 부딪혀 생긴 둥근 구덩이)'처럼 괄호 안에서 쉽게 풀어 주세요.",
   "자기소개를 할 때 NASA 지질학자나 박사님이라고 말하지 말고, 달·화성 전문가 AI라고 말하세요.",
   "내부 추론, 체크리스트, 영어 메모, 후보 좌표 목록, 프롬프트 지시문은 절대 출력하지 마세요.",
 ].join("\n");
 
-const FINAL_RESPONSE_RULES = [
+const EASY_FINAL_RESPONSE_RULES = [
+  "쉬움 단계 최종 출력 규칙:",
+  "아래의 후보 좌표와 참고 기준은 답변을 만들기 위한 내부 자료입니다. 그대로 복사하거나 요약해서 보여주지 마세요.",
+  "답변에는 최종 설명만 한국어로 작성하세요.",
+  "답변 앞뒤에 영어 계획표, 문단 설계, 자체 점검표, 내부 판단 메모를 절대 붙이지 마세요.",
+  "전체 답변은 3개의 짧은 문장 또는 3개의 짧은 줄로 끝내세요.",
+  "순서는 1) 어디인지, 2) 왜 만들어졌는지, 3) 왜 그렇게 보이는지입니다.",
+  "관찰 근거는 눈에 보이는 단서 1~2가지만 쓰고, 과학적으로 중요한 점이나 긴 비유는 넣지 마세요.",
+  "공식 지형명 후보가 잘 맞으면 지형명과 이름이 붙은 이유를 한 문장 안에 아주 짧게 덧붙이세요.",
+  "다음 관찰 질문은 만들지 마세요.",
+].join("\n");
+
+const EASY_FOLLOWUP_RESPONSE_RULES = [
+  "쉬움 단계 추가 답변 규칙:",
+  "아래의 후보 좌표와 참고 기준은 답변을 만들기 위한 내부 자료입니다. 그대로 복사하거나 요약해서 보여주지 마세요.",
+  "답변에는 최종 설명만 한국어로 작성하세요.",
+  "답변 앞뒤에 영어 계획표, 문단 설계, 자체 점검표, 내부 판단 메모를 절대 붙이지 마세요.",
+  "전체 답변은 2~3개의 짧은 문장으로 끝내세요.",
+  "학생 질문에 바로 답하고, 관찰 근거는 1가지만 쉽게 붙이세요.",
+  "과학적으로 중요한 점, 긴 비유, 다음 관찰 질문은 넣지 마세요.",
+].join("\n");
+
+const DETAILED_FINAL_RESPONSE_RULES = [
   "중요한 최종 출력 규칙:",
   "아래의 후보 좌표와 참고 기준은 답변을 만들기 위한 내부 자료입니다. 그대로 복사하거나 요약해서 보여주지 마세요.",
   "답변에는 최종 설명만 한국어로 작성하세요.",
@@ -124,6 +146,29 @@ const FINAL_RESPONSE_RULES = [
   "표시 좌표가 이름 있는 달·화성 지형과 잘 맞으면 공식 지형명과 그 이름이 붙은 이유를 설정된 학생 수준에 맞춰 포함하세요.",
   "중간 또는 어려움 단계에서는 이름 있는 지형의 대략적인 크기와 착륙지·후보지·탐사선 관련 여부를 확실한 범위에서 포함하세요. 모르는 내용은 추측하지 말고 확실하지 않다고 말하세요.",
 ].join("\n");
+
+function getFinalResponseRules(answerLevel = getActiveAnswerLevel(), mode = "analysis") {
+  if (answerLevel.key === "easy") {
+    return mode === "followup" ? EASY_FOLLOWUP_RESPONSE_RULES : EASY_FINAL_RESPONSE_RULES;
+  }
+  return DETAILED_FINAL_RESPONSE_RULES;
+}
+
+function getAnalysisStructureInstruction(answerLevel, selectionType) {
+  if (answerLevel.key === "easy") {
+    return selectionType === "rover"
+      ? "답변에는 1) 무엇처럼 보이는지, 2) 왜 생겼을 가능성이 있는지, 3) 왜 그렇게 보이는지만 아주 짧게 포함해 주세요."
+      : "답변에는 1) 표시한 곳이 어디인지, 2) 왜 만들어졌는지, 3) 왜 그렇게 보이는지만 아주 짧게 포함해 주세요.";
+  }
+
+  return selectionType === "rover"
+    ? `답변에는 1) 무엇처럼 보이는지, 2) 답변 단계에 맞는 관찰 근거, 3) 그 지형이나 암석이 생겼을 가능성, 4) 화성 지질학에서 왜 흥미로운지, 5) ${answerLevel.audience}이 기억할 쉬운 비유, 6) 다음 관찰 질문 하나를 포함해 주세요.`
+    : "답변에는 1) 표시한 곳의 지형 추정, 2) 답변 단계에 맞는 관찰 근거, 3) 지형이 만들어진 과정, 4) 과학적으로 중요한 점, 5) 쉬운 비유, 6) 더 살펴볼 질문 하나를 포함해 주세요.";
+}
+
+function getFollowupQuestionRules(answerLevel = getActiveAnswerLevel()) {
+  return answerLevel.key === "easy" ? "" : FOLLOWUP_QUESTION_RULES;
+}
 
 const FOLLOWUP_QUESTION_RULES = [
   "마지막의 다음 관찰 질문은 반드시 바로 앞 답변에서 설명한 핵심 지형, 생성 과정, 관찰 근거 중 하나를 이어서 물어보세요.",
@@ -3075,9 +3120,9 @@ function buildAnalysisPrompt(selection) {
       answerLevel.instruction,
       answerLevel.responseDetail,
       "사진 속 암석, 모래, 층리, 자갈, 균열처럼 보이는 특징을 중심으로 설명해 주세요.",
-      `답변에는 1) 무엇처럼 보이는지, 2) 답변 단계에 맞는 관찰 근거, 3) 그 지형이나 암석이 생겼을 가능성, 4) 화성 지질학에서 왜 흥미로운지, 5) ${answerLevel.audience}이 기억할 쉬운 비유, 6) 다음 관찰 질문 하나를 포함해 주세요.`,
-      FINAL_RESPONSE_RULES,
-      FOLLOWUP_QUESTION_RULES,
+      getAnalysisStructureInstruction(answerLevel, selection.type),
+      getFinalResponseRules(answerLevel),
+      getFollowupQuestionRules(answerLevel),
     ].join("\n");
   }
 
@@ -3099,9 +3144,9 @@ function buildAnalysisPrompt(selection) {
     body.key === "mars"
       ? "물, 강, 바다, 생명 흔적에 대한 설명은 특히 조심하세요. 전역 지도에서 어둡거나 길쭉한 무늬만 보인다고 물이 흘렀다고 단정하지 마세요. 다만 계곡망, 삼각주, 하천형 수로, 퇴적층처럼 물과 관련된 지형 근거가 보이면 '몇몇 과학자들은 이곳에 과거 물이 흘렀을 것으로 추정합니다'라고 표현하세요. 현재 물이 흐른다는 뜻으로 말하지 말고, 반드시 '과거'와 '추정'을 함께 사용하세요."
       : "",
-    "답변에는 1) 표시한 곳의 지형 추정, 2) 답변 단계에 맞는 관찰 근거, 3) 지형이 만들어진 과정, 4) 과학적으로 중요한 점, 5) 쉬운 비유, 6) 더 살펴볼 질문 하나를 포함해 주세요.",
-    FINAL_RESPONSE_RULES,
-    FOLLOWUP_QUESTION_RULES,
+    getAnalysisStructureInstruction(answerLevel, selection.type),
+    getFinalResponseRules(answerLevel),
+    getFollowupQuestionRules(answerLevel),
   ].join("\n");
 }
 
@@ -3307,8 +3352,8 @@ async function submitFollowup(event) {
       `학생 질문: ${question}`,
       answerLevel.instruction,
       `이전 맥락을 이어서 ${answerLevel.audience}에게 쉽고 친절하게 답하세요. ${answerLevel.followupDetail}`,
-      FINAL_RESPONSE_RULES,
-      FOLLOWUP_QUESTION_RULES,
+      getFinalResponseRules(answerLevel, "followup"),
+      getFollowupQuestionRules(answerLevel),
     ].join("\n");
     const answer = await askGemini(prompt, state.lastAnalysis.imageBase64);
     const answerCard = appendAnswerCard("전문가 답변", answer);
@@ -3366,8 +3411,8 @@ async function submitArchiveFollowup(event) {
       `학생의 이어지는 질문: ${question}`,
       answerLevel.instruction,
       `기존 아카이브의 사진과 대화 맥락을 이어서 ${answerLevel.audience}에게 쉽고 친절하게 답하세요. ${answerLevel.followupDetail}`,
-      FINAL_RESPONSE_RULES,
-      FOLLOWUP_QUESTION_RULES,
+      getFinalResponseRules(answerLevel, "followup"),
+      getFollowupQuestionRules(answerLevel),
     ].join("\n\n");
     const answer = await askGemini(prompt, imageBase64);
     const updatedRecord = addFollowupMessagesToRecord(record, question, answer);
